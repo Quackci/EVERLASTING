@@ -1,0 +1,134 @@
+{
+  "name": "everlasting-infinite-hallways",
+  "productName": "Everlasting Infinite Hallways",
+  "version": "0.1.0",
+  "description": "A top-down pixel-art school roguelike. Supplies are weapons; knowledge is power.",
+  "private": true,
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Everlasting Team"
+  },
+  "main": "dist-electron/main.cjs",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "dev:electron": "npm run build && npm run build:main && electron .",
+    "build": "vite build",
+    "build:main": "node scripts/build-electron.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.main.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "icon": "node scripts/generate-icon.mjs",
+    "build:mac": "npm run icon && npm run build && npm run build:main && electron-builder --mac",
+    "build:win": "npm run icon && npm run build && npm run build:main && electron-builder --win",
+    "build:linux": "npm run icon && npm run build && npm run build:main && electron-builder --linux",
+    "build:win:portable": "npm run icon && npm run build && npm run build:main && electron-builder --win portable --x64 -c.compression=normal",
+    "build:all": "npm run icon && npm run build && npm run build:main && electron-builder -mwl"
+  },
+  "dependencies": {
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "@types/node": "22.18.12",
+    "electron": "34.5.8",
+    "electron-builder": "25.1.8",
+    "esbuild": "0.25.11",
+    "eslint": "9.39.1",
+    "resedit": "^3.1.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.2",
+    "vite": "6.3.6",
+    "vite-node": "3.2.4",
+    "vitest": "3.2.4"
+  },
+  "build": {
+    "appId": "com.everlasting.infinitehallways",
+    "productName": "Everlasting Infinite Hallways",
+    "copyright": "Copyright (c) 2026 Everlasting Team",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "artifactName": "Everlasting-Infinite-Hallways-${version}-${arch}.${ext}",
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "asar": true,
+    "compression": "maximum",
+    "mac": {
+      "category": "public.app-category.games",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
+    },
+    "afterPack": "./scripts/after-pack.mjs",
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Everlasting Infinite Hallways",
+      "artifactName": "Everlasting-Infinite-Hallways-${version}-win-${arch}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "Everlasting-Infinite-Hallways-${version}-win-${arch}-portable.${ext}"
+    },
+    "linux": {
+      "category": "Game",
+      "executableArgs": [
+        "--no-sandbox"
+      ],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    }
+  }
+}

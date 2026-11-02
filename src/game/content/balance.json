@@ -1,0 +1,169 @@
+{
+  "$schema": "./balance.schema.json",
+  "player": {
+    "baseHp": 100,
+    "baseInk": 100,
+    "inkRegenPerSecond": 4,
+    "inkOnHit": 6,
+    "moveSpeed": 92,
+    "sprintMultiplier": 1.62,
+    "sprintDurationMs": 420,
+    "sprintCooldownMs": 1900,
+    "dodgeSpeed": 250,
+    "dodgeDurationMs": 210,
+    "dodgeInvulnMs": 260,
+    "dodgeCooldownMs": 1250,
+    "smartsCap": 999,
+    "beltSlots": 6,
+    "baseArmor": 0,
+    "hurtInvulnMs": 420
+  },
+  "combat": {
+    "armorScale": 60,
+    "minDamage": 1,
+    "critShake": 0.9,
+    "hitStopMs": 55,
+    "critHitStopMs": 90,
+    "hitStopDamageScale": 1.15,
+    "knockbackBase": 90,
+    "damageNumberRise": 18,
+    "inkSplashParticles": 7,
+    "maxParticles": 220,
+    "enemyIframesMs": 110,
+    "enemyAlertRadius": 150,
+    "enemyLeashRadius": 320,
+    "stunnedDamageBonus": 0.3,
+    "thrownReturnDelayMs": 180,
+    "blockMoveMultiplier": 0.42,
+    "blockDamageReduction": 0.7,
+    "parryWindowMs": 240,
+    "parryStunMs": 950,
+    "parryCounterMultiplier": 1.8,
+    "parryInvulnMs": 260
+  },
+  "enemyScaling": {
+    "hpGrowthPerFloor": 0.24,
+    "damageGrowthPerFloor": 0.16,
+    "speedGrowthPerFloor": 0.03,
+    "speedCap": 1.35,
+    "eliteHpMultiplier": 2.2,
+    "eliteDamageMultiplier": 1.4,
+    "affixPerAct": true
+  },
+  "floorScaling": {
+    "floors": 10,
+    "acts": [
+      { "act": 1, "name": "Homeroom Wing", "floors": [1, 4] },
+      { "act": 2, "name": "Science & Gym Wing", "floors": [5, 7] },
+      { "act": 3, "name": "Administrative Block", "floors": [8, 10] }
+    ],
+    "roomsMin": 8,
+    "roomsMax": 14,
+    "chestsMin": 1,
+    "chestsMax": 3,
+    "locksMin": 1,
+    "locksMax": 2,
+    "enemyPackMin": 3,
+    "enemyPackMax": 6
+  },
+  "quiz": {
+    "baseTimerSeconds": 22,
+    "timerPerTier": 0.9,
+    "minTimerSeconds": 8,
+    "tierPerFloor": 0.9,
+    "tierJitter": 1,
+    "adaptiveWindow": 12,
+    "adaptiveHighAccuracy": 0.8,
+    "adaptiveLowAccuracy": 0.45,
+    "adaptiveDelta": 1,
+    "hintCostSmarts": 10,
+    "maxHintsPerQuestion": 2,
+    "streakForFreeHint": 5,
+    "firstTrySmartsBase": 2,
+    "lockFailChipDamage": 6,
+    "lockFailSpawnEnemies": 1,
+    "lockFailFreeHintAt": 2,
+    "lockTutorDebuffAt": 3,
+    "tutorDebuffSeconds": 20,
+    "popQuizBuffSeconds": 10,
+    "popQuizDamageBonus": 0.25,
+    "bossGateQuestions": 3
+  },
+  "smarts": {
+    "enemyDropMin": 1,
+    "enemyDropMax": 6,
+    "eliteDropMin": 10,
+    "eliteDropMax": 20,
+    "bossDrop": 40,
+    "chestMin": 5,
+    "chestMax": 25,
+    "rewardFirstTryBonus": 1,
+    "shopStockMax": 3,
+    "repairCostPerDurability": 0.25,
+    "studyNookCost": 12,
+    "studyNookHeal": 25,
+    "rerollCost": 8,
+    "perkRerollCost": 14,
+    "questionSkipCost": 18,
+    "targetRunSmartsMin": 600,
+    "targetRunSmartsMax": 900
+  },
+  "fusion": {
+    "minIngredients": 2,
+    "maxIngredients": 3,
+    "damageBonus": 0.12,
+    "speedBonus": 0.08,
+    "costTierGrowth": 0.35,
+    "roughPrototypePenalty": 0.85,
+    "roughPrototypeCostDiscount": 0.25,
+    "roughPrototypeChance": 0.18,
+    "maxInheritedPerks": 2,
+    "newPerkChance": 0.55,
+    "durabilityBonus": 0.1,
+    "armorFusionScale": 0.6
+  },
+  "loot": {
+    "pityCommonsBeforeUncommon": 3,
+    "rarityWeights": {
+      "floor1": { "common": 62, "uncommon": 27, "rare": 8, "custom": 0, "cursed": 3 },
+      "floor4": { "common": 45, "uncommon": 32, "rare": 14, "custom": 4, "cursed": 5 },
+      "floor7": { "common": 32, "uncommon": 34, "rare": 20, "custom": 8, "cursed": 6 },
+      "floor10": { "common": 22, "uncommon": 32, "rare": 26, "custom": 12, "cursed": 8 }
+    },
+    "cursedHpPenalty": 20,
+    "cursedStatBonus": 0.3
+  },
+  "meta": {
+    "reportCardThresholds": [20, 60, 120],
+    "reportCardBonus": 0.05,
+    "starterKits": [
+      { "id": "kit_pencil_case", "name": "Pencil Case", "unlockCorrectAnswers": 0, "items": ["pencil", "red_pen", "binder_clip"], "smarts": 20 },
+      { "id": "kit_lunch_bag", "name": "Lunch Bag", "unlockCorrectAnswers": 15, "items": ["lunch_tray", "metal_thermos", "rubber_band"], "smarts": 30 },
+      { "id": "kit_lab_partner", "name": "Lab Partner", "unlockCorrectAnswers": 40, "items": ["safety_scissors", "lab_beaker", "protractor"], "smarts": 15 }
+    ]
+  },
+  "world": {
+    "tileSize": 16,
+    "viewWidth": 480,
+    "viewHeight": 270,
+    "floorWidthTiles": 74,
+    "floorHeightTiles": 46,
+    "roomMinSize": 5,
+    "roomMaxSize": 11,
+    "corridorWidth": 1,
+    "cameraLerp": 0.12
+  },
+  "audio": {
+    "defaultMaster": 0.7,
+    "defaultSfx": 0.8,
+    "defaultMusic": 0.45,
+    "maxVoices": 12
+  },
+  "accessibility": {
+    "defaultShake": 1,
+    "defaultFlashReduction": false,
+    "defaultTimerEnabled": true,
+    "defaultTextScale": 1,
+    "defaultReduceMotion": false
+  }
+}

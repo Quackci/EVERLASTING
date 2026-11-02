@@ -1,0 +1,14 @@
+[
+  { "id": "toolbox", "name": "Portable Toolbox", "tier": 3, "description": "Unlocks one limited fusion between floors.", "effects": { "portableForge": 1 }, "spriteKey": "box", "value": 40, "flavor": "Property of the shop class. Was." },
+  { "id": "lucky_eraser", "name": "Lucky Eraser", "tier": 1, "description": "+6% critical chance.", "effects": { "critChanceBonus": 0.06 }, "spriteKey": "box", "value": 18, "flavor": "Rubbed smooth by nervous thumbs." },
+  { "id": "class_president_pin", "name": "Class President Pin", "tier": 2, "description": "+8% damage, +2 Smarts per kill.", "effects": { "damageMult": 0.08, "smartsOnKill": 2 }, "spriteKey": "clip", "value": 30, "flavor": "Won by a single vote. Yours." },
+  { "id": "reading_glasses", "name": "Reading Glasses", "tier": 2, "description": "+8% Smarts from correct answers.", "effects": { "smartsBonus": 0.08 }, "spriteKey": "ring", "value": 26, "flavor": "Found in a desk. Prescription: panic." },
+  { "id": "stopped_watch", "name": "Stopped Watch", "tier": 3, "description": "+2 seconds on every question timer.", "effects": { "quizTimeBonus": 2 }, "spriteKey": "ring", "value": 32, "flavor": "It stopped at 3:15. So did everything else." },
+  { "id": "ink_stained_glove", "name": "Ink-Stained Glove", "tier": 2, "description": "Hits restore 4 extra Ink.", "effects": { "inkOnHit": 4 }, "spriteKey": "tray", "value": 24, "flavor": "One hand. Always the same hand." },
+  { "id": "hall_pass_lanyard", "name": "Hall Pass Lanyard", "tier": 3, "description": "Dodge cooldown reduced by 30%.", "effects": { "dodgeCooldownMult": 0.7 }, "spriteKey": "ticket", "value": 34, "flavor": "Access to everywhere except out." },
+  { "id": "study_group_photo", "name": "Study Group Photo", "tier": 2, "description": "+10 max HP per floor cleared this run.", "effects": { "hpPerFloor": 10 }, "spriteKey": "board", "value": 28, "flavor": "Four faces. Three of them are yours." },
+  { "id": "graphing_calculator", "name": "Graphing Calculator", "tier": 4, "description": "+15% damage on precision supplies.", "effects": { "tagDamage": { "tag": "precision", "bonus": 0.15 } }, "spriteKey": "box", "value": 44, "flavor": "Battery: mysterious and infinite." },
+  { "id": "lunch_lady_favor", "name": "Lunch Lady's Favour", "tier": 3, "description": "Heal 3 HP every time you kill something.", "effects": { "healOnKill": 3 }, "spriteKey": "tray", "value": 36, "flavor": "You never asked what was in the loaf." },
+  { "id": "torn_notebook_page", "name": "Torn Notebook Page", "tier": 2, "description": "+1 hint per question.", "effects": { "extraHints": 1 }, "spriteKey": "paper", "value": 30, "flavor": "The handwriting is yours. You don't remember writing it." },
+  { "id": "emergency_bell", "name": "Emergency Bell", "tier": 4, "description": "Once per floor, survive a killing blow at 1 HP.", "effects": { "secondChance": 1 }, "spriteKey": "ring", "value": 50, "flavor": "Pull in case of everything." }
+]

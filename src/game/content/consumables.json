@@ -1,0 +1,10 @@
+[
+  { "id": "apple_juice", "name": "Apple Juice Box", "tier": 1, "heal": 25, "flavor": "100% juice, 0% apple.", "spriteKey": "bottle", "icon": "bottle", "value": 10 },
+  { "id": "chocolate_milk", "name": "Chocolate Milk", "tier": 2, "heal": 35, "ink": 35, "flavor": "The good carton. The one with the straw attached.", "spriteKey": "bottle", "icon": "bottle", "value": 16 },
+  { "id": "ink_refill", "name": "Ink Refill Bottle", "tier": 2, "ink": 100, "flavor": "Refill only. Do not drink. Again.", "spriteKey": "bottle", "icon": "bottle", "value": 18 },
+  { "id": "correction_fluid", "name": "Correction Fluid", "tier": 2, "repair": 45, "flavor": "Fixes mistakes. And weapons, apparently.", "spriteKey": "bottle", "icon": "bottle", "value": 16 },
+  { "id": "granola_bar", "name": "Granola Bar", "tier": 1, "heal": 15, "speedBuff": 0.2, "buffSeconds": 8, "flavor": "Contains nuts and a small amount of hope.", "spriteKey": "box", "icon": "box", "value": 9 },
+  { "id": "energy_drink", "name": "Energy Drink", "tier": 3, "ink": 60, "damageBuff": 0.2, "buffSeconds": 12, "flavor": "Not approved by any coach.", "spriteKey": "bottle", "icon": "bottle", "value": 22 },
+  { "id": "cold_pizza", "name": "Cold Pizza Slice", "tier": 2, "heal": 25, "smarts": 5, "flavor": "Friday's. It is not Friday.", "spriteKey": "tray", "icon": "tray", "value": 14 },
+  { "id": "hall_pass_token", "name": "Hall Pass Token", "tier": 3, "skipQuestion": true, "flavor": "Signed, stamped, and technically valid forever.", "spriteKey": "ticket", "icon": "ticket", "value": 24 }
+]
