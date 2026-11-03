@@ -68,7 +68,7 @@ export class TitleScene extends Phaser.Scene {
     });
 
     this.#hint = new PixelLabel(this, width / 2, height - 34, {
-      text: 'PRESS ENTER TO START',
+      text: 'PRESS ENTER TO ENROLL',
       color: '#e7c65b',
       scale: 1,
       width: 460,
@@ -105,7 +105,7 @@ export class TitleScene extends Phaser.Scene {
     const start = (): void => {
       if (this.#started) return;
       this.#started = true;
-      this.scene.start('Run', { seed: this.#seed, floor: 1 });
+      this.scene.start('SaveSelect');
     };
 
     this.input.keyboard?.once('keydown-ENTER', start);

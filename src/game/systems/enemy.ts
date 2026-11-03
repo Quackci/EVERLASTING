@@ -26,17 +26,28 @@ export interface Point {
  * additive per floor rather than compounding, so floor 10 does not become a
  * wall of bullet sponges.
  */
+export interface EnemyDifficultyModifiers {
+  hpMultiplier?: number;
+  damageMultiplier?: number;
+  speedMultiplier?: number;
+}
+
 export function scaleEnemyStats(
   def: EnemyDef,
   floor: number,
   balance: Balance,
   elite = false,
+  difficulty: EnemyDifficultyModifiers = {},
 ): ScaledEnemyStats {
   const growth = Math.max(0, floor - 1);
   const scaling = balance.enemyScaling;
-  const hpMultiplier = 1 + growth * scaling.hpGrowthPerFloor;
-  const damageMultiplier = 1 + growth * scaling.damageGrowthPerFloor;
-  const speedMultiplier = Math.min(scaling.speedCap, 1 + growth * scaling.speedGrowthPerFloor);
+  const hpMultiplier = (1 + growth * scaling.hpGrowthPerFloor) * (difficulty.hpMultiplier ?? 1);
+  const damageMultiplier =
+    (1 + growth * scaling.damageGrowthPerFloor) * (difficulty.damageMultiplier ?? 1);
+  const speedMultiplier = Math.min(
+    scaling.speedCap,
+    (1 + growth * scaling.speedGrowthPerFloor) * (difficulty.speedMultiplier ?? 1),
+  );
   const eliteHp = elite ? scaling.eliteHpMultiplier : 1;
   const eliteDamage = elite ? scaling.eliteDamageMultiplier : 1;
 

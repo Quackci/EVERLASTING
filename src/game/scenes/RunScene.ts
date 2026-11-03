@@ -1,11 +1,25 @@
 import Phaser from 'phaser';
-import { BALANCE, ENEMY_BY_ID, ITEMS, QUESTIONS, ROOMS } from '../content';
+import {
+  BALANCE,
+  CLASSES,
+  CLASS_BY_ID,
+  DIFFICULTIES,
+  DIFFICULTY_BY_ID,
+  ENEMY_BY_ID,
+  ITEMS,
+  ITEM_BY_ID,
+  QUESTIONS,
+  ROOMS,
+  SKILLS,
+  SKILL_BY_ID,
+} from '../content';
 import { chestTextureKey, ensureItemIcon, ensurePropTexture, enemyTextureKey } from '../art/sprites';
 import { PixelLabel } from '../art/text';
 import { createRng, weightedPick, type Rng } from '../core/rng';
-import type { EnemyDef, ItemDef, Subject } from '../content/types';
+import type { DifficultyDef, EnemyDef, ItemDef, PerkEffects, SkillDef, Subject } from '../content/types';
 import { buildFloor, roomAt, TILE_FLOOR, TILE_WALL, type ChestSpot, type FloorPlan } from '../world/dungeon';
 import {
+  aggregateEffectList,
   attackSpeedOf,
   computeDamage,
   damageTakenMultiplier,
@@ -18,6 +32,7 @@ import {
   aimVector,
   deathFadeMs,
   isRangedEnemy,
+  type EnemyDifficultyModifiers,
   knockbackVector,
   preferredRange,
   scaleEnemyStats,
@@ -41,10 +56,17 @@ import {
   upgradeTarget,
   type PresentedQuestion,
 } from '../systems/loot';
+import { clearSlot, makeSave, writeSlot } from '../systems/save';
 
 interface RunSceneData {
   seed: number;
   floor: number;
+  classId?: string;
+  difficultyId?: string;
+  slot?: number;
+  smarts?: number;
+  unlocked?: string[];
+  hp?: number;
 }
 
 interface EnemyActor {
@@ -91,14 +113,17 @@ interface Hotspot {
   run: () => void;
 }
 
-type OverlayKind = 'none' | 'paused' | 'inventory' | 'loot' | 'loot-question' | 'loot-result';
+type OverlayKind = 'none' | 'paused' | 'inventory' | 'loot' | 'loot-question' | 'loot-result' | 'skills';
 
 const TILE = BALANCE.world.tileSize;
 const VIEW_W = BALANCE.world.viewWidth;
 const VIEW_H = BALANCE.world.viewHeight;
 const INVENTORY_ROWS = 8;
 
-function starterWeapon(): ItemDef {
+function starterWeapon(classId?: string): ItemDef {
+  const classDef = classId ? CLASS_BY_ID.get(classId) : undefined;
+  const preferred = classDef ? ITEM_BY_ID.get(classDef.weaponId) : undefined;
+  if (preferred) return preferred;
   const weapon = ITEMS.find((item) => item.id === 'pencil') ?? ITEMS.find((item) => item.kind === 'weapon');
   if (!weapon) throw new Error('Content is missing a starter weapon');
   return weapon;
@@ -112,6 +137,19 @@ export class RunScene extends Phaser.Scene {
   #lootRng: Rng = createRng(1);
   #questionRng: Rng = createRng(1);
   #ambientRng: Rng = createRng(1);
+  #slot = 1;
+  #classId: string = CLASSES[0]?.id ?? 'field_tripper';
+  #difficultyId = 'midterm';
+  #unlocked: string[] = [];
+  #skillIndex = 0;
+  #maxHp = BALANCE.player.baseHp;
+  #inkMax = BALANCE.player.baseInk;
+  #moveSpeed = BALANCE.player.moveSpeed;
+  #armorValue = 0;
+  #blockReductionBonus = 0;
+  #dodgeCooldownMult = 1;
+  #smartsMultiplier = 1;
+  #difficulty?: DifficultyDef;
   #player!: Phaser.Physics.Arcade.Sprite;
   #playerShadow!: Phaser.GameObjects.Image;
   #wallZones: Phaser.GameObjects.GameObject[] = [];
@@ -145,7 +183,10 @@ export class RunScene extends Phaser.Scene {
   #binds: Keybinds = loadKeybinds();
   #bindKeys: Partial<Record<BindAction, Phaser.Input.Keyboard.Key>> = {};
   #arrows!: Record<'up' | 'down' | 'left' | 'right', Phaser.Input.Keyboard.Key>;
-  #menu!: Record<'confirm' | 'space' | 'c' | 'one' | 'two' | 'three' | 'four', Phaser.Input.Keyboard.Key>;
+  #menu!: Record<
+    'confirm' | 'space' | 'c' | 'k' | 'one' | 'two' | 'three' | 'four',
+    Phaser.Input.Keyboard.Key
+  >;
 
   #blocking = false;
   #blockStartedAt = 0;
@@ -177,6 +218,11 @@ export class RunScene extends Phaser.Scene {
   init(data: RunSceneData = { seed: 1, floor: 1 }): void {
     this.#seed = data.seed >>> 0;
     this.#floor = data.floor;
+    this.#slot = Math.max(1, Math.min(3, data.slot ?? 1));
+    this.#classId = data.classId ?? this.#classId;
+    this.#difficultyId = data.difficultyId ?? this.#difficultyId;
+    this.#unlocked = [...new Set(data.unlocked ?? [])];
+    this.#skillIndex = 0;
     this.#combatRng = createRng(this.#seed).fork(`combat-${this.#floor}`);
     this.#lootRng = createRng(this.#seed).fork(`loot-${this.#floor}`);
     this.#questionRng = createRng(this.#seed).fork(`quiz-${this.#floor}`);
@@ -186,9 +232,9 @@ export class RunScene extends Phaser.Scene {
     this.#inventory = [this.#weapon];
     this.#invIndex = 0;
     this.#effects = emptyEffects();
-    this.#hp = BALANCE.player.baseHp;
+    this.#hp = data.hp ?? 0;
     this.#ink = BALANCE.player.baseInk;
-    this.#smarts = 0;
+    this.#smarts = data.smarts ?? 0;
     this.#dead = false;
     this.#nextSwingAt = 0;
     this.#wallZones = [];
@@ -219,6 +265,7 @@ export class RunScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor('#0b0f12');
     this.#plan = buildFloor(this.#seed, this.#floor, ROOMS);
+    this.#applyLoadout();
     this.#projectiles = this.physics.add.group();
     this.#buildFloorVisuals();
     this.#createPlayer();
@@ -250,7 +297,10 @@ export class RunScene extends Phaser.Scene {
     this.cameras.main.setRoundPixels(true);
     this.physics.world.setBounds(0, 0, this.#plan.width * TILE, this.#plan.height * TILE);
 
-    this.#showToast(`FLOOR ${this.#floor} - ${this.#plan.theme.name.toUpperCase()}`, 2600);
+    const classDef = CLASS_BY_ID.get(this.#classId) ?? CLASSES[0];
+    const mode = this.#difficulty ? ` / ${this.#difficulty.name.toUpperCase()}` : '';
+    const who = classDef ? `  ${classDef.name.toUpperCase()}` : '';
+    this.#showToast(`FLOOR ${this.#floor} - ${this.#plan.theme.name.toUpperCase()}${who}${mode}`, 2600);
 
     if (this.#plan.bossId) {
       const boss = ENEMY_BY_ID.get(this.#plan.bossId);
@@ -260,6 +310,8 @@ export class RunScene extends Phaser.Scene {
         );
       }
     }
+
+    this.#persist();
   }
 
   // -------------------------------------------------------------------------
@@ -417,7 +469,7 @@ export class RunScene extends Phaser.Scene {
   }
 
   #addEnemy(def: EnemyDef, x: number, y: number, elite: boolean, roomId: number): void {
-    const stats = scaleEnemyStats(def, this.#floor, BALANCE, elite);
+    const stats = scaleEnemyStats(def, this.#floor, BALANCE, elite, this.#difficultyModifiers());
     const shadow = this.add.image(x, y + 6, 'shadow').setDepth(Math.round(y) - 1).setAlpha(0.45);
     const sprite = this.physics.add.sprite(x, y, enemyTextureKey(def.archetype, def.palette)).setDepth(Math.round(y));
     sprite.setSize(12, 12);
@@ -585,6 +637,7 @@ export class RunScene extends Phaser.Scene {
       confirm: keyboard.addKey(code.ENTER),
       space: keyboard.addKey(code.SPACE),
       c: keyboard.addKey(code.C),
+      k: keyboard.addKey(code.K),
       one: keyboard.addKey(code.ONE),
       two: keyboard.addKey(code.TWO),
       three: keyboard.addKey(code.THREE),
@@ -626,13 +679,13 @@ export class RunScene extends Phaser.Scene {
     this.#hpBar.clear();
     this.#hpBar.fillStyle(0x11181f, 1).fillRect(barX - 1, barY - 1, barWidth + 2, 8);
     this.#hpBar.fillStyle(0x8f2b30, 1).fillRect(barX, barY, barWidth, 6);
-    const hpRatio = Math.max(0, Math.min(1, this.#hp / BALANCE.player.baseHp));
+    const hpRatio = Math.max(0, Math.min(1, this.#hp / this.#maxHp));
     this.#hpBar.fillStyle(0xc8453f, 1).fillRect(barX, barY, Math.round(barWidth * hpRatio), 6);
 
     this.#inkBar.clear();
     this.#inkBar.fillStyle(0x11181f, 1).fillRect(barX - 1, barY + 12, barWidth + 2, 6);
     this.#inkBar.fillStyle(0x2c4a7d, 1).fillRect(barX, barY + 13, barWidth, 4);
-    const inkRatio = Math.max(0, Math.min(1, this.#ink / BALANCE.player.baseInk));
+    const inkRatio = Math.max(0, Math.min(1, this.#ink / this.#inkMax));
     this.#inkBar.fillStyle(0x4a76b8, 1).fillRect(barX, barY + 13, Math.round(barWidth * inkRatio), 4);
 
     const alive = this.#enemies.filter((enemy) => enemy.alive).length;
@@ -693,7 +746,7 @@ export class RunScene extends Phaser.Scene {
       const facing = moving ? { x: ix, y: iy } : this.#facingVector();
       const length = Math.hypot(facing.x, facing.y) || 1;
       this.#dodgeUntil = time + BALANCE.player.dodgeDurationMs;
-      this.#dodgeReadyAt = time + BALANCE.player.dodgeCooldownMs;
+      this.#dodgeReadyAt = time + BALANCE.player.dodgeCooldownMs * this.#dodgeCooldownMult;
       this.#invulnUntil = Math.max(this.#invulnUntil, time + BALANCE.player.dodgeInvulnMs);
       body.setVelocity(
         (facing.x / length) * BALANCE.player.dodgeSpeed,
@@ -707,10 +760,10 @@ export class RunScene extends Phaser.Scene {
     } else if (time < this.#knockbackUntil) {
       // Let the hit impulse play out before steering resumes.
     } else if (this.#blocking) {
-      const speed = BALANCE.player.moveSpeed * BALANCE.combat.blockMoveMultiplier;
+      const speed = this.#moveSpeed * BALANCE.combat.blockMoveMultiplier;
       body.setVelocity(ix * speed, iy * speed);
     } else {
-      const speed = BALANCE.player.moveSpeed * (time < this.#sprintUntil ? BALANCE.player.sprintMultiplier : 1);
+      const speed = this.#moveSpeed * (time < this.#sprintUntil ? BALANCE.player.sprintMultiplier : 1);
       body.setVelocity(ix * speed, iy * speed);
     }
 
@@ -730,9 +783,9 @@ export class RunScene extends Phaser.Scene {
     this.#player.setAlpha(time < this.#invulnUntil ? 0.6 : 1);
     this.#stairs.setDepth(this.#stairs.y);
 
-    if (this.#ink < BALANCE.player.baseInk) {
+    if (this.#ink < this.#inkMax) {
       this.#ink = Math.min(
-        BALANCE.player.baseInk,
+        this.#inkMax,
         this.#ink + BALANCE.player.inkRegenPerSecond * (delta / 1000),
       );
     }
@@ -878,7 +931,7 @@ export class RunScene extends Phaser.Scene {
       isRanged: false,
       targetStunned: enemy.stunnedUntil > this.time.now,
       targetAtFullHp: enemy.hp === enemy.maxHp,
-      attackerHpPct: this.#hp / BALANCE.player.baseHp,
+      attackerHpPct: this.#hp / this.#maxHp,
       streak: 0,
       firstHitAfterWrong: false,
       critRoll: this.#combatRng.next(),
@@ -962,12 +1015,18 @@ export class RunScene extends Phaser.Scene {
     if (now < this.#invulnUntil) return;
 
     let incoming = Math.max(1, Math.round(amount * damageTakenMultiplier(this.#effects, 'blunt')));
-    if (this.#armor?.armorValue) {
-      incoming = Math.max(1, incoming - Math.round(this.#armor.armorValue * 0.35));
+    const armorTotal = this.#armorValue + (this.#armor?.armorValue ?? 0);
+    if (armorTotal > 0) {
+      incoming = Math.max(1, incoming - Math.round(armorTotal * 0.35));
     }
 
     if (this.#blocking) {
-      const outcome = resolveBlock(incoming, now - this.#blockStartedAt, BALANCE);
+      const outcome = resolveBlock(
+        incoming,
+        now - this.#blockStartedAt,
+        BALANCE,
+        this.#blockReductionBonus,
+      );
       if (outcome.parried) {
         this.#invulnUntil = now + BALANCE.combat.parryInvulnMs;
         this.#showFloat(this.#player.x, this.#player.y - 18, 'PARRY!', '#e7c65b');
@@ -1016,6 +1075,7 @@ export class RunScene extends Phaser.Scene {
   #gameOver(): void {
     this.#dead = true;
     this.#hp = 0;
+    clearSlot(this.#slot);
     this.#blocking = false;
     this.#pointerBlocking = false;
     this.#blockArc?.setVisible(false);
@@ -1034,7 +1094,7 @@ export class RunScene extends Phaser.Scene {
     if (body) body.enable = false;
     this.#smarts = Math.min(
       BALANCE.player.smartsCap,
-      this.#smarts + smartsDrop(enemy.def, this.#combatRng, BALANCE),
+      this.#smarts + this.#smartsGain(smartsDrop(enemy.def, this.#combatRng, BALANCE)),
     );
     this.#spawnDust(enemy.sprite.x, enemy.sprite.y, 10);
     const targetScale = enemy.sprite.scaleX * 1.15;
@@ -1269,8 +1329,9 @@ export class RunScene extends Phaser.Scene {
     }
     this.#spawnSparks(pickup.sprite.x, pickup.sprite.y - 2, 8);
 
-    const loot = rollChestLoot(this.#lootRng, pickup.chest, this.#floor, BALANCE, ITEMS);
-    this.#smarts = Math.min(BALANCE.player.smartsCap, this.#smarts + loot.smarts);
+    const luck = this.#difficulty?.lootLuck ?? 0;
+    const loot = rollChestLoot(this.#lootRng, pickup.chest, this.#floor, BALANCE, ITEMS, luck);
+    this.#smarts = Math.min(BALANCE.player.smartsCap, this.#smarts + this.#smartsGain(loot.smarts));
     for (const item of loot.items) this.#inventory.push(item);
     this.#pendingLoot = { ...loot, furniture: pickup.furniture };
     this.#refreshHud();
@@ -1400,6 +1461,168 @@ export class RunScene extends Phaser.Scene {
     return weightedPick(this.#questionRng, entries);
   }
 
+  #applyLoadout(): void {
+    const classDef = CLASS_BY_ID.get(this.#classId) ?? CLASSES[0];
+    if (!classDef) throw new Error('Content is missing playable classes');
+    const difficulty = DIFFICULTY_BY_ID.get(this.#difficultyId) ?? DIFFICULTIES[0];
+    if (!difficulty) throw new Error('Content is missing difficulty levels');
+    this.#difficulty = difficulty;
+    this.#blockReductionBonus = classDef.blockReductionBonus;
+    this.#dodgeCooldownMult = classDef.dodgeCooldownMultiplier;
+    this.#smartsMultiplier = difficulty.smartsMultiplier;
+    this.#weapon = starterWeapon(classDef.id);
+    this.#inventory = [this.#weapon];
+    this.#recomputeStats();
+    this.#ink = this.#inkMax;
+  }
+
+  #recomputeStats(): void {
+    const classDef = CLASS_BY_ID.get(this.#classId) ?? CLASSES[0];
+    if (!classDef) return;
+    const nodeEffects: PerkEffects[] = [];
+    let bonusHp = 0;
+    let bonusArmor = 0;
+    let bonusSpeed = 0;
+    let bonusInk = 0;
+    for (const id of this.#unlocked) {
+      const skill = SKILL_BY_ID.get(id);
+      if (!skill) continue;
+      if (skill.effects) nodeEffects.push(skill.effects);
+      bonusHp += skill.maxHp ?? 0;
+      bonusArmor += skill.armor ?? 0;
+      bonusSpeed += skill.moveSpeed ?? 0;
+      bonusInk += skill.ink ?? 0;
+    }
+    this.#effects = aggregateEffectList([
+      {
+        damageMult: classDef.damageMultiplier - 1,
+        critChanceBonus: classDef.critChanceBonus,
+        reachBonus: classDef.reachBonus,
+        armorBonus: classDef.armorBonus,
+      },
+      ...nodeEffects,
+    ]);
+    this.#maxHp = Math.max(1, Math.round(BALANCE.player.baseHp * classDef.hpMultiplier) + bonusHp);
+    this.#armorValue = classDef.armorBonus + bonusArmor;
+    this.#moveSpeed = BALANCE.player.moveSpeed * classDef.moveSpeedMultiplier + bonusSpeed;
+    this.#inkMax = BALANCE.player.baseInk + classDef.inkBonus + bonusInk;
+    this.#hp = this.#hp > 0 ? Math.min(this.#hp, this.#maxHp) : this.#maxHp;
+    this.#ink = Math.min(this.#ink, this.#inkMax);
+  }
+
+  #difficultyModifiers(): EnemyDifficultyModifiers {
+    const difficulty = this.#difficulty;
+    if (!difficulty) return {};
+    return {
+      hpMultiplier: difficulty.enemyHpMultiplier,
+      damageMultiplier: difficulty.enemyDamageMultiplier,
+      speedMultiplier: difficulty.enemySpeedMultiplier,
+    };
+  }
+
+  #smartsGain(amount: number): number {
+    return Math.max(0, Math.round(amount * this.#smartsMultiplier));
+  }
+
+  #persist(): void {
+    if (this.#dead) return;
+    writeSlot(
+      makeSave({
+        slot: this.#slot,
+        seed: this.#seed,
+        floor: this.#floor,
+        classId: this.#classId,
+        difficultyId: this.#difficultyId,
+        smarts: this.#smarts,
+        unlocked: this.#unlocked,
+        hp: Math.max(0, Math.round(this.#hp)),
+        maxHp: this.#maxHp,
+        updatedAt: Date.now(),
+      }),
+    );
+  }
+
+  #skillPool(): SkillDef[] {
+    return SKILLS.filter((skill) => skill.classId === this.#classId);
+  }
+
+  #skillUnlocked(id: string): boolean {
+    return this.#unlocked.includes(id);
+  }
+
+  #skillAvailable(skill: SkillDef): boolean {
+    if (this.#skillUnlocked(skill.id)) return false;
+    return skill.requires === null || this.#skillUnlocked(skill.requires);
+  }
+
+  #openSkills(): void {
+    this.#openOverlay('skills');
+    this.#skillIndex = 0;
+    this.#renderSkills();
+  }
+
+  #renderSkills(): void {
+    this.#resetOverlayContent();
+    this.#panel(24, 16, 432, 238);
+    const classDef = CLASS_BY_ID.get(this.#classId);
+    this.#text(`${(classDef?.name ?? 'STUDENT').toUpperCase()} - SKILL TREE`, 38, 24, '#e7c65b', {
+      width: 300,
+    });
+    this.#text(`${this.#smarts} SMARTS`, VIEW_W - 38, 24, '#a9c4a0', { width: 120, align: 'right' });
+
+    const nodes = this.#skillPool();
+    const selected = nodes[this.#skillIndex];
+    nodes.forEach((skill, index) => {
+      const y = 46 + index * 22;
+      const owned = this.#skillUnlocked(skill.id);
+      const available = this.#skillAvailable(skill);
+      const affordable = this.#smarts >= skill.cost;
+      const active = index === this.#skillIndex;
+      if (active) this.#overlayGfx?.fillStyle(0x233040, 1).fillRect(32, y - 3, 416, 20);
+      const mark = owned ? '[X]' : available ? (affordable ? '[ ]' : '[/]') : '[-]';
+      const color = owned ? '#a9c4a0' : available ? (affordable ? '#eef3e6' : '#8c949a') : '#5f686f';
+      this.#text(`${mark} T${skill.tier}  ${skill.name.toUpperCase()}`, 38, y, active ? '#e7c65b' : color, {
+        width: 300,
+      });
+      this.#text(owned ? 'LEARNED' : `${skill.cost} SMARTS`, 330, y, owned ? '#6fae5f' : color, {
+        width: 110,
+        align: 'right',
+      });
+      this.#addHotspot(32, y - 3, 416, 20, () => {
+        this.#skillIndex = index;
+        this.#renderSkills();
+      });
+    });
+
+    if (selected) {
+      this.#text(selected.description, 38, 182, '#b9c0c4', { width: 400, maxLines: 2 });
+      const locked = !this.#skillAvailable(selected) && !this.#skillUnlocked(selected.id);
+      const note = this.#skillUnlocked(selected.id)
+        ? 'ALREADY ON YOUR RECORD.'
+        : locked
+          ? 'REQUIRES AN EARLIER NODE.'
+          : this.#smarts < selected.cost
+            ? `NEED ${selected.cost - this.#smarts} MORE SMARTS.`
+            : 'ENTER TO LEARN.';
+      this.#text(note, 38, 206, locked ? '#c8453f' : '#e7c65b', { width: 400 });
+    }
+    this.#text('W/S SELECT   ENTER LEARN   K CLOSE', 38, 226, '#5f686f', { width: 400 });
+  }
+
+  #buySkill(): void {
+    const skill = this.#skillPool()[this.#skillIndex];
+    if (!skill) return;
+    if (!this.#skillAvailable(skill) || this.#smarts < skill.cost) return;
+    this.#smarts -= skill.cost;
+    this.#unlocked.push(skill.id);
+    this.#recomputeStats();
+    this.#hp = Math.min(this.#maxHp, this.#hp + (skill.maxHp ?? 0));
+    this.#spawnSparks(this.#player.x, this.#player.y - 10, 10);
+    this.#persist();
+    this.#refreshHud();
+    this.#renderSkills();
+  }
+
   #descend(): void {
     const nextFloor = this.#floor + 1;
     if (nextFloor > BALANCE.floorScaling.floors) {
@@ -1407,7 +1630,17 @@ export class RunScene extends Phaser.Scene {
       this.time.delayedCall(1400, () => this.scene.start('Title'));
       return;
     }
-    this.scene.restart({ seed: this.#seed, floor: nextFloor });
+    this.#persist();
+    this.scene.restart({
+      seed: this.#seed,
+      floor: nextFloor,
+      classId: this.#classId,
+      difficultyId: this.#difficultyId,
+      slot: this.#slot,
+      smarts: this.#smarts,
+      unlocked: this.#unlocked,
+      hp: this.#hp,
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -1504,14 +1737,15 @@ export class RunScene extends Phaser.Scene {
     const rows: { text: string; run: () => void }[] = [
       { text: `${keyName(this.#binds.pause)}   RESUME`, run: () => this.#closeOverlay() },
       { text: `${keyName(this.#binds.inventory)}   INVENTORY`, run: () => this.#openInventory() },
+      { text: 'K   SKILL TREE', run: () => this.#openSkills() },
       { text: 'C   CONTROLS & KEYBINDS', run: () => this.#openSettings() },
     ];
     rows.forEach((row, index) => {
-      const y = 92 + index * 16;
+      const y = 86 + index * 15;
       this.#text(row.text, 96, y, index === 0 ? '#cfe3c0' : '#b9c0c4', { width: 280 });
       this.#addHotspot(84, y - 4, 300, 15, row.run);
     });
-    this.#text('LEFT CLICK GUARD, RIGHT CLICK SWING.\nLOCKERS GLOW WHEN THEY HOLD SOMETHING.', 96, 146, '#8c949a', {
+    this.#text('LEFT CLICK GUARD, RIGHT CLICK SWING.\nLOCKERS GLOW WHEN THEY HOLD SOMETHING.', 96, 150, '#8c949a', {
       width: 290,
       maxLines: 2,
     });
@@ -1660,6 +1894,32 @@ export class RunScene extends Phaser.Scene {
       }
       case 'loot-result': {
         if (confirm || cancel) this.#closeOverlay();
+        break;
+      }
+      case 'skills': {
+        const nodes = this.#skillPool();
+        if (nodes.length === 0) {
+          if (cancel) this.#closeOverlay();
+          return;
+        }
+        let moved = false;
+        if (this.#navJust('up')) {
+          this.#skillIndex = (this.#skillIndex + nodes.length - 1) % nodes.length;
+          moved = true;
+        }
+        if (this.#navJust('down')) {
+          this.#skillIndex = (this.#skillIndex + 1) % nodes.length;
+          moved = true;
+        }
+        if (moved) {
+          this.#renderSkills();
+          return;
+        }
+        if (confirm) {
+          this.#buySkill();
+          return;
+        }
+        if (cancel || Phaser.Input.Keyboard.JustDown(this.#menu.k)) this.#closeOverlay();
         break;
       }
       default:

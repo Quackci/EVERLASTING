@@ -131,6 +131,16 @@ export function aggregatePerkEffects(perkIds: readonly string[], perkIndex: Read
   return total;
 }
 
+/**
+ * Folds an explicit list of effect blocks together. Class bonuses and purchased
+ * skill nodes use this, so they stack with exactly the same rules as perks.
+ */
+export function aggregateEffectList(effectsList: readonly PerkEffects[]): AggregatedEffects {
+  const total: AggregatedEffects = { ...EMPTY };
+  for (const effects of effectsList) addEffects(total, effects);
+  return total;
+}
+
 export function aggregateTrinketEffects(
   trinkets: readonly TrinketDef[],
   base: AggregatedEffects = { ...EMPTY },
@@ -277,7 +287,12 @@ export interface BlockOutcome {
  * window is measured from the moment the block was raised, which is what makes
  * the timing skill-testing instead of a permanent damage reduction.
  */
-export function resolveBlock(damage: number, elapsedMs: number, balance: Balance): BlockOutcome {
+export function resolveBlock(
+  damage: number,
+  elapsedMs: number,
+  balance: Balance,
+  reductionBonus = 0,
+): BlockOutcome {
   const cfg = balance.combat;
   if (elapsedMs < 0) {
     return { damage, parried: false, blocked: false };
@@ -285,7 +300,7 @@ export function resolveBlock(damage: number, elapsedMs: number, balance: Balance
   if (elapsedMs <= cfg.parryWindowMs) {
     return { damage: 0, parried: true, blocked: true };
   }
-  const reduction = Math.min(0.95, Math.max(0, cfg.blockDamageReduction));
+  const reduction = Math.min(0.95, Math.max(0, cfg.blockDamageReduction + reductionBonus));
   return {
     damage: Math.max(cfg.minDamage, Math.round(damage * (1 - reduction))),
     parried: false,

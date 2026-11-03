@@ -105,3 +105,22 @@ Short judgement calls made while building, with one line of rationale each.
     through `sanitizeKeybinds`: junk becomes the default, duplicates are
     repaired, and a key already owned by another action is rejected rather than
     silently stolen.
+36. **Saves live in local storage, not the save IPC** — Electron already has a
+    file-backed save bridge, but using it would give the desktop build a
+    different code path from the Pages build. `localStorage` exists in both, so
+    one versioned, validated save module serves every target and the schema can
+    be unit-tested with a stub.
+37. **A save is written on floor entry, and death clears the slot** — writing on
+    every hit would churn storage, and writing only on quit loses a run when the
+    process is killed. Floor granularity loses at most one floor, which matches
+    how the run is paced.
+38. **Classes are content, not hard-coded branching** — stats and pros/cons live
+    in `classes.json` so the validator can prove every starting weapon exists and
+    every multiplier is positive, exactly like enemies and items.
+39. **Skill nodes reuse `PerkEffects`** — a node is an effect block (plus a few
+    flat stats), folded through the same aggregation as perks. That keeps one
+    stacking rule, one place to change damage maths, and no parallel buff system.
+40. **Difficulty multiplies enemy stats at spawn and loot at roll time** — the
+    multipliers are passed into the existing pure functions rather than mutating
+    content, so switching difficulty never rewrites the loaded data and the
+    tests keep exercising the same curves.

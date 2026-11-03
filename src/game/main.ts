@@ -4,6 +4,9 @@ import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { RunScene } from './scenes/RunScene';
 import { SettingsScene } from './scenes/SettingsScene';
+import { SaveSelectScene } from './scenes/SaveSelectScene';
+import { CharacterScene } from './scenes/CharacterScene';
+import { DifficultyScene } from './scenes/DifficultyScene';
 
 const viewWidth = BALANCE.world.viewWidth;
 const viewHeight = BALANCE.world.viewHeight;
@@ -47,7 +50,7 @@ try {
       powerPreference: 'high-performance',
       batchSize: 2048,
     },
-    scene: [BootScene, TitleScene, SettingsScene, RunScene],
+    scene: [BootScene, TitleScene, SaveSelectScene, CharacterScene, DifficultyScene, SettingsScene, RunScene],
   });
 } catch (error) {
   showFatal(error instanceof Error ? error.message : String(error));

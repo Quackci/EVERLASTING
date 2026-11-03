@@ -69,6 +69,7 @@ npm run dev     # browser playtest at http://localhost:5173
 | Dodge roll | Space | Short burst of invulnerability |
 | Open desk / locker / stairs | E | Glowing lockers and desks are within reach when prompted |
 | Inventory | I | Equip weapons and armour, read item specials |
+| Skill tree | K (from the pause menu) | Spend Smarts on your class's six nodes |
 | Pause / menu | Escape | Resume, inventory and controls |
 
 Every action except the arrow-key alternates is rebindable. Press **C** on the
@@ -77,6 +78,37 @@ click a row (or select it with W/S) and press the key you want. A key that is
 already taken is refused with the name of the action holding it, so two actions
 never fire together. Bindings persist in local storage between launches, and
 **R** restores the defaults.
+
+## Saves, students and difficulty
+
+The game opens on **Choose a Locker**: three save slots. An empty slot starts a
+new run, a filled one resumes exactly where that run reached — seed, floor,
+class, difficulty, Smarts, HP and learned skills are all restored. **N** starts a
+fresh run in the selected slot, **Del** erases it. A run is written to its slot
+every time a floor is entered, so closing the game never loses more than one
+floor; dying clears the slot.
+
+Four students are playable, each with a real trade-off rather than a damage
+number:
+
+| Student | Role | Stands out at | Pays for it with |
+| --- | --- | --- | --- |
+| Field Tripper | Adventurer | Cheapest skill tree, no weaknesses | No standout strength |
+| Arrow-Demic | Archer | Starts with a ranged supply, +12 reach, +6% crit | 15% less HP |
+| Hall Monitor | Tank | +35% HP, 6 armour, stronger blocks | Slow, long dodge cooldown, no crits |
+| Class Cutter | Assassin | +12% crit, fast feet, short dodge cooldown | 20% less HP and no armour |
+
+Three difficulties are chosen once per run: **Pop Quiz** (softer enemies, more
+Smarts), **Midterm** (the balanced default) and **Final Exam** (30% tougher
+enemies, leaner loot).
+
+## Skill trees
+
+Smarts double as currency. Press **K** in the pause menu to open your class's
+six-node tree, three tiers deep and branching from two tier-one roots. A node
+costs Smarts (20–100), must have its prerequisite, and permanently changes the
+run: max HP, armour, movement, Ink, damage, crit chance, reach or attack speed.
+Purchased nodes are stored in the save slot, so a resumed run keeps them.
 
 ## Containers and bonus questions
 

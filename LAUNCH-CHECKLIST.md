@@ -8,12 +8,13 @@ checked here.
 
 - [x] `npm run typecheck` — renderer and Electron main both clean (strict).
 - [x] `npm run lint` — clean, including the `Math.random()` ban.
-- [x] `npm test` — 101 tests green: content validation, question keys recomputed,
+- [x] `npm test` — 121 tests green: content validation, question keys recomputed,
       duplicate prompts, RNG determinism, A* pathfinding, dungeon determinism /
       connectivity / gates / boss floors, damage math, enemy scaling, aggro /
       leash, projectile aim, kill rewards, bitmap font, block/parry windows,
       room-scoped aggro, keybind defaults/conflicts/persistence, loot rolls,
-      item upgrades and answer shuffling.
+      item upgrades and answer shuffling, class/difficulty/skill content,
+      effect stacking and save-slot validation.
 - [x] `npm run build` — production renderer builds (`dist/`, ~1.6 MB JS,
       383 kB gzipped).
 - [x] `npm run build:main` — Electron main + preload bundle to CommonJS.
@@ -80,6 +81,9 @@ Not yet built (tracked by milestone):
 | Rebound keys still work after a relaunch | Pending — unit-tested store, real window unverified |
 | Right click attacks without opening a context menu | Pending — needs a real window |
 | GitHub Pages build plays in a browser | Pending — workflow added, first run needs the repo |
+| Save slot writes on floor entry and resumes with class, difficulty, HP and skills | Pending — logic unit-tested, UI unverified |
+| Class trade-offs are felt in play (tank vs assassin) | Pending — numbers verified, feel unverified |
+| Skill tree purchase and persistence | Pending — aggregation unit-tested, screen unverified |
 | Fusion with 2 and 3 ingredients | Pending (M4) |
 | 30 minutes of play, zero crashes | Pending |
 | Every settings toggle persists | Pending (settings UI is M7) |

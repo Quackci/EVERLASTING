@@ -1,0 +1,29 @@
+[
+  { "id": "ft_study_hall", "classId": "field_tripper", "name": "Study Hall", "description": "+10 max HP. Quiet room, quieter nerves.", "cost": 20, "tier": 1, "requires": null, "maxHp": 10 },
+  { "id": "ft_extra_credit", "classId": "field_tripper", "name": "Extra Credit", "description": "+6% damage. Handed in early, marked generously.", "cost": 20, "tier": 1, "requires": null, "effects": { "damageMult": 0.06 } },
+  { "id": "ft_homework_club", "classId": "field_tripper", "name": "Homework Club", "description": "+6 reach. Someone else's ruler, borrowed indefinitely.", "cost": 35, "tier": 2, "requires": "ft_study_hall", "effects": { "reachBonus": 6 } },
+  { "id": "ft_sharp_point", "classId": "field_tripper", "name": "Sharpened Point", "description": "+5% crit chance. The sharpener by the door finally works.", "cost": 35, "tier": 2, "requires": "ft_extra_credit", "effects": { "critChanceBonus": 0.05 } },
+  { "id": "ft_second_wind", "classId": "field_tripper", "name": "Second Wind", "description": "+20 max HP and +3 armour. You remembered to breathe.", "cost": 60, "tier": 3, "requires": "ft_homework_club", "maxHp": 20, "armor": 3 },
+  { "id": "ft_honour_roll", "classId": "field_tripper", "name": "Honour Roll", "description": "+12% damage and +3 Ink on hit. Your name is on the wall.", "cost": 70, "tier": 3, "requires": "ft_sharp_point", "effects": { "damageMult": 0.12, "inkOnHit": 3 } },
+
+  { "id": "ad_quiver_check", "classId": "arrow_demic", "name": "Quiver Check", "description": "+10 Ink. Count your ammunition before the bell.", "cost": 25, "tier": 1, "requires": null, "ink": 10 },
+  { "id": "ad_steady_aim", "classId": "arrow_demic", "name": "Steady Aim", "description": "+5% crit chance. Breathe out, then release.", "cost": 25, "tier": 1, "requires": null, "effects": { "critChanceBonus": 0.05 } },
+  { "id": "ad_long_shot", "classId": "arrow_demic", "name": "Long Shot", "description": "+14 reach. From the back of the classroom.", "cost": 45, "tier": 2, "requires": "ad_quiver_check", "effects": { "reachBonus": 14 } },
+  { "id": "ad_quick_draw", "classId": "arrow_demic", "name": "Quick Draw", "description": "+15% attack speed. The band is always loaded.", "cost": 45, "tier": 2, "requires": "ad_steady_aim", "effects": { "speedBonus": 0.15 } },
+  { "id": "ad_volley", "classId": "arrow_demic", "name": "Pencil Volley", "description": "+10% damage and +20% crit damage. Everyone gets a turn.", "cost": 80, "tier": 3, "requires": "ad_long_shot", "effects": { "damageMult": 0.1, "critMultBonus": 0.2 } },
+  { "id": "ad_valedictorian", "classId": "arrow_demic", "name": "Valedictorian", "description": "+15% damage and +5% crit. A speech nobody asked for.", "cost": 100, "tier": 3, "requires": "ad_quick_draw", "effects": { "damageMult": 0.15, "critChanceBonus": 0.05 } },
+
+  { "id": "hm_bully_pulpit", "classId": "hall_monitor", "name": "Bully Pulpit", "description": "+15 max HP. You have the floor, and the doorway.", "cost": 25, "tier": 1, "requires": null, "maxHp": 15 },
+  { "id": "hm_braced", "classId": "hall_monitor", "name": "Braced", "description": "+4 armour. Feet apart, shoulders square.", "cost": 25, "tier": 1, "requires": null, "armor": 4 },
+  { "id": "hm_doorway", "classId": "hall_monitor", "name": "Doorway Stance", "description": "+4 armour and +4 reach. Nothing gets past.", "cost": 45, "tier": 2, "requires": "hm_bully_pulpit", "armor": 4, "effects": { "reachBonus": 4 } },
+  { "id": "hm_detention_glare", "classId": "hall_monitor", "name": "Detention Glare", "description": "+8% damage. The look that ends a hallway.", "cost": 45, "tier": 2, "requires": "hm_braced", "effects": { "damageMult": 0.08 } },
+  { "id": "hm_hall_sweep", "classId": "hall_monitor", "name": "Hall Sweep", "description": "+10% damage and +6 reach. Clearing the corridor, one kid at a time.", "cost": 80, "tier": 3, "requires": "hm_doorway", "effects": { "damageMult": 0.1, "reachBonus": 6 } },
+  { "id": "hm_tenure", "classId": "hall_monitor", "name": "Tenure", "description": "+30 max HP and +6 armour. They cannot remove you now.", "cost": 100, "tier": 3, "requires": "hm_detention_glare", "maxHp": 30, "armor": 6 },
+
+  { "id": "cc_hall_pass", "classId": "class_cutter", "name": "Hall Pass", "description": "+8 move speed. Legally nowhere, physically everywhere.", "cost": 25, "tier": 1, "requires": null, "moveSpeed": 8 },
+  { "id": "cc_quiet_steps", "classId": "class_cutter", "name": "Quiet Steps", "description": "+5% crit chance. The floor stops squeaking for you.", "cost": 25, "tier": 1, "requires": null, "effects": { "critChanceBonus": 0.05 } },
+  { "id": "cc_shortcut", "classId": "class_cutter", "name": "Shortcut", "description": "+10 move speed and +10% attack speed. Past the boiler room.", "cost": 45, "tier": 2, "requires": "cc_hall_pass", "moveSpeed": 10, "effects": { "speedBonus": 0.1 } },
+  { "id": "cc_marked_absent", "classId": "class_cutter", "name": "Marked Absent", "description": "+10% damage. Nobody saw anything.", "cost": 45, "tier": 2, "requires": "cc_quiet_steps", "effects": { "damageMult": 0.1 } },
+  { "id": "cc_cut_class", "classId": "class_cutter", "name": "Cut Class", "description": "+8% crit and +8% damage. The lesson continues without you.", "cost": 80, "tier": 3, "requires": "cc_shortcut", "effects": { "critChanceBonus": 0.08, "damageMult": 0.08 } },
+  { "id": "cc_unseen", "classId": "class_cutter", "name": "Unseen", "description": "+15% damage and +25% crit damage. A rumour with a stapler.", "cost": 100, "tier": 3, "requires": "cc_marked_absent", "effects": { "damageMult": 0.15, "critMultBonus": 0.25 } }
+]

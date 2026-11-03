@@ -1,0 +1,38 @@
+[
+  {
+    "id": "pop_quiz",
+    "name": "Pop Quiz",
+    "tagline": "THE TEACHER FORGOT THE ANSWERS.",
+    "description": "Enemies are softer, hit lighter and drop more Smarts. Learn the hallways here.",
+    "enemyHpMultiplier": 0.85,
+    "enemyDamageMultiplier": 0.75,
+    "enemySpeedMultiplier": 0.95,
+    "lootLuck": 0.3,
+    "smartsMultiplier": 1.25,
+    "accent": "green"
+  },
+  {
+    "id": "midterm",
+    "name": "Midterm",
+    "tagline": "THE INTENDED EXPERIENCE.",
+    "description": "The numbers the game was balanced around. No modifiers, no excuses.",
+    "enemyHpMultiplier": 1,
+    "enemyDamageMultiplier": 1,
+    "enemySpeedMultiplier": 1,
+    "lootLuck": 0,
+    "smartsMultiplier": 1,
+    "accent": "yellow"
+  },
+  {
+    "id": "final_exam",
+    "name": "Final Exam",
+    "tagline": "EVERYTHING AT ONCE, NO NOTES.",
+    "description": "Tougher, angrier enemies and leaner loot. Fewer Smarts, so spend them well.",
+    "enemyHpMultiplier": 1.3,
+    "enemyDamageMultiplier": 1.35,
+    "enemySpeedMultiplier": 1.05,
+    "lootLuck": -0.2,
+    "smartsMultiplier": 0.9,
+    "accent": "red"
+  }
+]

@@ -223,6 +223,56 @@ export interface QuestionDef {
   verify?: number;
 }
 
+/** A playable student archetype. All numbers are multipliers or flat bonuses. */
+export interface ClassDef {
+  id: string;
+  name: string;
+  title: string;
+  blurb: string;
+  weaponId: string;
+  hpMultiplier: number;
+  damageMultiplier: number;
+  moveSpeedMultiplier: number;
+  critChanceBonus: number;
+  reachBonus: number;
+  armorBonus: number;
+  inkBonus: number;
+  dodgeCooldownMultiplier: number;
+  blockReductionBonus: number;
+  pros: string[];
+  cons: string[];
+  accent: string;
+}
+
+export interface DifficultyDef {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  enemyHpMultiplier: number;
+  enemyDamageMultiplier: number;
+  enemySpeedMultiplier: number;
+  lootLuck: number;
+  smartsMultiplier: number;
+  accent: string;
+}
+
+/** One purchasable node on a class's skill tree. */
+export interface SkillDef {
+  id: string;
+  classId: string;
+  name: string;
+  description: string;
+  cost: number;
+  tier: number;
+  requires: string | null;
+  effects?: PerkEffects;
+  maxHp?: number;
+  armor?: number;
+  moveSpeed?: number;
+  ink?: number;
+}
+
 export interface RoomTemplateDef {
   id: string;
   theme: string;
@@ -409,4 +459,7 @@ export interface ContentBundle {
   questions: QuestionDef[];
   rooms: RoomTemplateDef[];
   themes: ThemeDef[];
+  classes: ClassDef[];
+  difficulties: DifficultyDef[];
+  skills: SkillDef[];
 }

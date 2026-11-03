@@ -86,8 +86,10 @@ export function rollChestLoot(
   floor: number,
   balance: Balance,
   items: readonly ItemDef[],
+  bonusLuck = 0,
 ): LootRoll {
-  const luck = chest.rarity === 'rare' ? 0.6 : chest.rarity === 'locked' ? 0.3 : 0;
+  const containerLuck = chest.rarity === 'rare' ? 0.6 : chest.rarity === 'locked' ? 0.3 : 0;
+  const luck = containerLuck + bonusLuck;
   const rarity = rollRarity(rng, floor, balance, luck);
   const tier = RARITY_TIER[rarity];
   const weapons = itemsForTier(tier, items).filter((item) => item.kind === 'weapon');

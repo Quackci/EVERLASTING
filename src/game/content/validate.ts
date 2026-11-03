@@ -39,6 +39,9 @@ export const CONTENT_MINIMUMS = {
   consumables: 8,
   trinkets: 12,
   themes: 9,
+  classes: 4,
+  difficulties: 3,
+  skillsPerClass: 6,
 } as const;
 
 function isFiniteNumber(value: unknown): value is number {
@@ -330,6 +333,94 @@ export function validateContent(content: ContentBundle): ValidationIssue[] {
     const where = `rooms.${room.id}`;
     if (!themeIds.has(room.theme)) push(where, `unknown theme "${room.theme}"`);
     if (room.props.length < 2) push(where, 'needs at least 2 props');
+  }
+
+  // ---- classes, difficulties and skill trees -------------------------------
+  const classIds = new Set<string>();
+  for (const cls of content.classes) {
+    const where = `classes.${cls.id}`;
+    if (classIds.has(cls.id)) push(where, 'duplicate class id');
+    classIds.add(cls.id);
+    if (!itemIds.has(cls.weaponId)) push(where, `unknown starting weapon "${cls.weaponId}"`);
+    for (const field of [
+      'hpMultiplier',
+      'damageMultiplier',
+      'moveSpeedMultiplier',
+      'dodgeCooldownMultiplier',
+    ] as const) {
+      if (!isFiniteNumber(cls[field]) || cls[field] <= 0) push(where, `${field} must be positive`);
+    }
+    for (const field of ['critChanceBonus', 'reachBonus', 'armorBonus', 'inkBonus', 'blockReductionBonus'] as const) {
+      if (!isFiniteNumber(cls[field])) push(where, `${field} must be a number`);
+    }
+    if (!Array.isArray(cls.pros) || cls.pros.length === 0) push(where, 'needs at least one pro');
+    if (!Array.isArray(cls.cons) || cls.cons.length === 0) push(where, 'needs at least one con');
+    if (typeof cls.blurb !== 'string' || cls.blurb.trim().length < 8) push(where, 'needs a blurb');
+    if (typeof cls.title !== 'string' || cls.title.trim().length === 0) push(where, 'needs a title');
+  }
+  if (content.classes.length < CONTENT_MINIMUMS.classes) {
+    push('classes', `need at least ${CONTENT_MINIMUMS.classes}, found ${content.classes.length}`);
+  }
+
+  const difficultyIds = new Set<string>();
+  for (const difficulty of content.difficulties) {
+    const where = `difficulties.${difficulty.id}`;
+    if (difficultyIds.has(difficulty.id)) push(where, 'duplicate difficulty id');
+    difficultyIds.add(difficulty.id);
+    for (const field of [
+      'enemyHpMultiplier',
+      'enemyDamageMultiplier',
+      'enemySpeedMultiplier',
+      'smartsMultiplier',
+    ] as const) {
+      if (!isFiniteNumber(difficulty[field]) || difficulty[field] <= 0) {
+        push(where, `${field} must be positive`);
+      }
+    }
+    if (!isFiniteNumber(difficulty.lootLuck)) push(where, 'lootLuck must be a number');
+    if (typeof difficulty.tagline !== 'string' || difficulty.tagline.trim().length === 0) {
+      push(where, 'needs a tagline');
+    }
+  }
+  if (content.difficulties.length < CONTENT_MINIMUMS.difficulties) {
+    push('difficulties', `need at least ${CONTENT_MINIMUMS.difficulties}, found ${content.difficulties.length}`);
+  }
+
+  const skillIds = new Set<string>();
+  for (const skill of content.skills) {
+    const where = `skills.${skill.id}`;
+    if (skillIds.has(skill.id)) push(where, 'duplicate skill id');
+    skillIds.add(skill.id);
+    if (!classIds.has(skill.classId)) push(where, `unknown class "${skill.classId}"`);
+    if (!isFiniteNumber(skill.cost) || skill.cost <= 0) push(where, 'cost must be positive');
+    if (!Number.isInteger(skill.tier) || skill.tier < 1 || skill.tier > 3) {
+      push(where, 'tier must be 1-3');
+    }
+    const hasStat =
+      skill.maxHp !== undefined ||
+      skill.armor !== undefined ||
+      skill.moveSpeed !== undefined ||
+      skill.ink !== undefined;
+    if (!skill.effects && !hasStat) push(where, 'needs an effect or a stat bonus');
+    if (typeof skill.description !== 'string' || skill.description.trim().length < 8) {
+      push(where, 'needs a description');
+    }
+  }
+  for (const skill of content.skills) {
+    if (skill.requires === null) continue;
+    const parent = content.skills.find((candidate) => candidate.id === skill.requires);
+    if (!parent) push(`skills.${skill.id}`, `unknown prerequisite "${skill.requires}"`);
+    else if (parent.classId !== skill.classId) {
+      push(`skills.${skill.id}`, 'prerequisite belongs to another class');
+    } else if (parent.tier >= skill.tier) {
+      push(`skills.${skill.id}`, 'prerequisite must sit in an earlier tier');
+    }
+  }
+  for (const classId of classIds) {
+    const count = content.skills.filter((skill) => skill.classId === classId).length;
+    if (count < CONTENT_MINIMUMS.skillsPerClass) {
+      push(`skills.${classId}`, `needs ${CONTENT_MINIMUMS.skillsPerClass} nodes, found ${count}`);
+    }
   }
 
   return issues;
