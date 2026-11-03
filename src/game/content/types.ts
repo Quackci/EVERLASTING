@@ -339,6 +339,11 @@ export interface Balance {
     parryCounterMultiplier: number;
     parryInvulnMs: number;
   };
+  recovery: {
+    killsPerHeal: number;
+    killHealPercent: number;
+    roomClearHealPercent: number;
+  };
   enemyScaling: {
     hpGrowthPerFloor: number;
     damageGrowthPerFloor: number;

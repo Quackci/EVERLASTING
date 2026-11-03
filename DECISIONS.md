@@ -124,3 +124,10 @@ Short judgement calls made while building, with one line of rationale each.
     multipliers are passed into the existing pure functions rather than mutating
     content, so switching difficulty never rewrites the loaded data and the
     tests keep exercising the same curves.
+41. **Rooms and kill streaks pay health back** — clearing a room that held
+    enemies restores 10% of max HP, and every third kill restores 20%. Both live
+    in `balance.json.recovery` and are applied by pure helpers in
+    `systems/recovery.ts`, so the cadence is testable and one file retunes the
+    curve. Percentages rather than flat numbers keep the payout fair for the Hall
+    Monitor's 135 HP and the Class Cutter's 80. A room pays once per floor and
+    only if it actually spawned an enemy, so walking empty rooms cannot be farmed.

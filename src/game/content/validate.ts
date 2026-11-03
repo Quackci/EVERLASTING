@@ -90,6 +90,20 @@ export function validateContent(content: ContentBundle): ValidationIssue[] {
   if (!isFiniteNumber(balance.player?.baseHp) || balance.player.baseHp <= 0) {
     push('balance.player.baseHp', 'must be a positive number');
   }
+  const recovery = balance.recovery;
+  if (!recovery) {
+    push('balance.recovery', 'needs a recovery block');
+  } else {
+    if (!Number.isInteger(recovery.killsPerHeal) || recovery.killsPerHeal < 1) {
+      push('balance.recovery.killsPerHeal', 'must be a positive whole number of kills');
+    }
+    for (const field of ['killHealPercent', 'roomClearHealPercent'] as const) {
+      const value = recovery[field];
+      if (!isFiniteNumber(value) || value <= 0 || value > 1) {
+        push(`balance.recovery.${field}`, 'must be a fraction between 0 and 1');
+      }
+    }
+  }
   const weightKeys = Object.keys(balance.loot?.rarityWeights ?? {});
   if (weightKeys.length < 4) {
     push('balance.loot.rarityWeights', 'expected weight tables for floors 1, 4, 7 and 10');

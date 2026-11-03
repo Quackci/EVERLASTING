@@ -79,6 +79,12 @@ already taken is refused with the name of the action holding it, so two actions
 never fire together. Bindings persist in local storage between launches, and
 **R** restores the defaults.
 
+Health comes back from two places during a run: clearing a room that held
+enemies restores 10% of your maximum HP, and every third kill restores 20%.
+Both payouts are percentages, so the Hall Monitor's 135 HP bar and the Class
+Cutter's 80 scale the same way, and both numbers live in
+`src/game/content/balance.json`.
+
 ## Saves, students and difficulty
 
 The game opens on **Choose a Locker**: three save slots. An empty slot starts a

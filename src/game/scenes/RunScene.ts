@@ -28,6 +28,7 @@ import {
   resolveBlock,
   type AggregatedEffects,
 } from '../systems/combat';
+import { applyHeal, healForPercent, killHealDue } from '../systems/recovery';
 import {
   aimVector,
   deathFadeMs,
@@ -166,6 +167,8 @@ export class RunScene extends Phaser.Scene {
   #hp = BALANCE.player.baseHp;
   #ink = BALANCE.player.baseInk;
   #smarts = 0;
+  #kills = 0;
+  #clearedRooms = new Set<number>();
   #sprintUntil = 0;
   #sprintReadyAt = 0;
   #dodgeUntil = 0;
@@ -235,6 +238,8 @@ export class RunScene extends Phaser.Scene {
     this.#hp = data.hp ?? 0;
     this.#ink = BALANCE.player.baseInk;
     this.#smarts = data.smarts ?? 0;
+    this.#kills = 0;
+    this.#clearedRooms = new Set<number>();
     this.#dead = false;
     this.#nextSwingAt = 0;
     this.#wallZones = [];
@@ -1068,6 +1073,28 @@ export class RunScene extends Phaser.Scene {
     }
   }
 
+  /** Applies a heal, floats the amount gained and returns it (0 at full HP). */
+  #healPlayer(amount: number): number {
+    if (this.#dead || amount <= 0) return 0;
+    const before = this.#hp;
+    this.#hp = applyHeal(this.#hp, this.#maxHp, amount);
+    const gained = Math.round(this.#hp - before);
+    if (gained <= 0) return 0;
+    this.#showFloat(this.#player.x, this.#player.y - 18, `+${gained}`, '#8fd694');
+    this.#refreshHud();
+    return gained;
+  }
+
+  /** Pays out once per room, and only for rooms that held an enemy. */
+  #clearRoom(roomId: number): void {
+    if (roomId < 0 || this.#clearedRooms.has(roomId)) return;
+    if (!this.#enemies.some((enemy) => enemy.roomId === roomId)) return;
+    if (this.#enemies.some((enemy) => enemy.alive && enemy.roomId === roomId)) return;
+    this.#clearedRooms.add(roomId);
+    const gained = this.#healPlayer(healForPercent(this.#maxHp, BALANCE.recovery.roomClearHealPercent));
+    this.#showToast(gained > 0 ? `ROOM CLEAR. +${gained} HP.` : 'ROOM CLEAR.', 1500);
+  }
+
   #cameras(): Phaser.Cameras.Scene2D.Camera {
     return this.cameras.main;
   }
@@ -1096,6 +1123,12 @@ export class RunScene extends Phaser.Scene {
       BALANCE.player.smartsCap,
       this.#smarts + this.#smartsGain(smartsDrop(enemy.def, this.#combatRng, BALANCE)),
     );
+    this.#kills += 1;
+    const recovery = BALANCE.recovery;
+    if (killHealDue(this.#kills, recovery)) {
+      this.#healPlayer(healForPercent(this.#maxHp, recovery.killHealPercent));
+    }
+    this.#clearRoom(enemy.roomId);
     this.#spawnDust(enemy.sprite.x, enemy.sprite.y, 10);
     const targetScale = enemy.sprite.scaleX * 1.15;
     this.tweens.add({

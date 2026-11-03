@@ -41,6 +41,11 @@
     "parryCounterMultiplier": 1.8,
     "parryInvulnMs": 260
   },
+  "recovery": {
+    "killsPerHeal": 3,
+    "killHealPercent": 0.2,
+    "roomClearHealPercent": 0.1
+  },
   "enemyScaling": {
     "hpGrowthPerFloor": 0.24,
     "damageGrowthPerFloor": 0.16,
