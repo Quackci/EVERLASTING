@@ -238,7 +238,12 @@ export function createFloorPlan(seed: number, floor: number): FloorPlan {
     for (let i = 0; i < packSize; i += 1) {
       const spot = freeTileInRoom(tiles, width, room, rng, [spawn, stairsPoint], 2);
       if (!spot) continue;
-      const elite = room.kind !== 'boss' && rng.chance(0.08 + floor * 0.012);
+      const scaling = BALANCE.enemyScaling;
+      const eliteChance = Math.min(
+        scaling.eliteChanceMax,
+        scaling.eliteChanceBase + floor * scaling.eliteChancePerFloor,
+      );
+      const elite = room.kind !== 'boss' && rng.chance(eliteChance);
       const pool = elite ? ELITES.filter((enemy) => enemy.act <= actForFloor(floor) + 1) : normalPool(theme);
       const enemy = rng.pick(pool.length > 0 ? pool : normalPool(theme));
       enemySpawns.push({ x: spot.x, y: spot.y, enemyId: enemy.id, roomId: room.id, elite });

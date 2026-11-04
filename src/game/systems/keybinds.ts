@@ -23,6 +23,8 @@ export type Keybinds = Record<BindAction, number>;
 
 /** Block is on the left mouse button by default, not a physical key. */
 export const MOUSE_LEFT = -2;
+/** The right mouse button can be bound the same way, e.g. to swing. */
+export const MOUSE_RIGHT = -3;
 /** A deliberate "nothing bound here" slot. */
 export const UNBOUND = 0;
 export const KEYBINDS_STORAGE_KEY = 'everlasting.keybinds.v1';
@@ -97,6 +99,7 @@ const NAMED_CODES: Readonly<Record<number, string>> = {
   104: 'NUM8',
   105: 'NUM9',
   [MOUSE_LEFT]: 'LEFT CLICK',
+  [MOUSE_RIGHT]: 'RIGHT CLICK',
   [UNBOUND]: 'UNBOUND',
 };
 
@@ -111,7 +114,16 @@ export function keyName(code: number): string {
 }
 
 export function isBindableCode(code: unknown): code is number {
-  return typeof code === 'number' && Number.isInteger(code) && (code === MOUSE_LEFT || code > 0);
+  return (
+    typeof code === 'number' &&
+    Number.isInteger(code) &&
+    (code === MOUSE_LEFT || code === MOUSE_RIGHT || code > 0)
+  );
+}
+
+/** True for the two mouse buttons the game can hand to an action. */
+export function isMouseBind(code: number): boolean {
+  return code === MOUSE_LEFT || code === MOUSE_RIGHT;
 }
 
 export function defaultKeybinds(): Keybinds {

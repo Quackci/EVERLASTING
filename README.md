@@ -85,6 +85,31 @@ Both payouts are percentages, so the Hall Monitor's 135 HP bar and the Class
 Cutter's 80 scale the same way, and both numbers live in
 `src/game/content/balance.json`.
 
+## Controls and keybinds
+
+Every action on the controls screen is rebindable, and the two mouse buttons are
+bind codes like any key: ENTER on a row, then press the key or click the button
+you want. Backspace clears a bind, R restores the defaults, and conflicts are
+refused rather than silently stealing a key. The controls screen is reachable
+from the title and from the pause menu, and a rebind made mid-run is applied as
+soon as you close it.
+
+## Bosses, loot and the locker room
+
+Floors 4, 7 and 10 end in a boss. A boss drops gear rolled at the stage's own
+power level — the tier climbs with the floor, so the floor 10 principal hands you
+the kind of weapon the last act expects. Your bag, equipped weapon and armor now
+travel down the stairs with you instead of resetting to the class starter.
+
+Killing a boss also opens a lit locker room in its chamber. Walk back to the
+lockers and use them: pick a piece of gear, answer the question on the bench, and
+a correct answer upgrades that item a tier. Three questions per boss, a wrong
+answer burns one, and the room locks after your visit.
+
+Enemies grow harder every floor — HP and damage climb steeply with depth, elites
+become more common, and the numbers live in `enemyScaling` in
+`src/game/content/balance.json`.
+
 ## Saves, students and difficulty
 
 The game opens on **Choose a Locker**: three save slots. An empty slot starts a

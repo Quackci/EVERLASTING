@@ -4,6 +4,9 @@ import { PixelLabel } from '../art/text';
 import {
   BIND_ACTIONS,
   BIND_LABELS,
+  MOUSE_LEFT,
+  MOUSE_RIGHT,
+  UNBOUND,
   assignBind,
   defaultKeybinds,
   keyName,
@@ -42,7 +45,7 @@ export class SettingsScene extends Phaser.Scene {
     this.#binds = loadKeybinds();
     this.#index = 0;
     this.#capturing = null;
-    this.#message = 'PRESS A ROW, THEN PRESS THE KEY YOU WANT.';
+    this.#message = 'PRESS A ROW, THEN PRESS A KEY OR MOUSE BUTTON.';
 
     this.cameras.main.setBackgroundColor('#0b0f12');
     this.#gfx = this.add.graphics().setDepth(0);
@@ -54,6 +57,7 @@ export class SettingsScene extends Phaser.Scene {
     }
     this.#keyHandler = (event: KeyboardEvent): void => this.#onKeyDown(event);
     keyboard.on('keydown', this.#keyHandler);
+    this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.#onPointer(pointer));
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -67,25 +71,22 @@ export class SettingsScene extends Phaser.Scene {
 
     if (this.#capturing) {
       event.preventDefault();
+      const action = this.#capturing;
       if (code === 27) {
         this.#capturing = null;
         this.#message = 'REBIND CANCELLED.';
         this.#render();
         return;
       }
-      const action = this.#capturing;
-      const result = assignBind(this.#binds, action, code);
-      if (result.accepted) {
-        this.#binds = result.binds;
+      if (code === 8 || code === 46) {
+        this.#binds = { ...this.#binds, [action]: UNBOUND };
         saveKeybinds(this.#binds);
         this.#capturing = null;
-        this.#message = `${BIND_LABELS[action]} IS NOW ${keyName(code)}.`;
-      } else if (result.conflict) {
-        this.#message = `${keyName(code)} IS ALREADY ${BIND_LABELS[result.conflict]}.`;
-      } else {
-        this.#message = 'THAT KEY CANNOT BE USED.';
+        this.#message = `${BIND_LABELS[action]} IS UNBOUND.`;
+        this.#render();
+        return;
       }
-      this.#render();
+      this.#applyCapture(code);
       return;
     }
 
@@ -119,7 +120,30 @@ export class SettingsScene extends Phaser.Scene {
     }
   }
 
+  /** Attempts the binding and explains why it was refused, if it was. */
+  #applyCapture(code: number): void {
+    const action = this.#capturing;
+    if (!action) return;
+    const result = assignBind(this.#binds, action, code);
+    if (result.accepted) {
+      this.#binds = result.binds;
+      saveKeybinds(this.#binds);
+      this.#capturing = null;
+      this.#message = `${BIND_LABELS[action]} IS NOW ${keyName(code)}.`;
+    } else if (result.conflict) {
+      this.#message = `${keyName(code)} IS ALREADY ${BIND_LABELS[result.conflict]}.`;
+    } else {
+      this.#message = 'THAT KEY CANNOT BE USED.';
+    }
+    this.#render();
+  }
+
   #onPointer(pointer: Phaser.Input.Pointer): void {
+    if (this.#capturing) {
+      if (pointer.button === 0) this.#applyCapture(MOUSE_LEFT);
+      else if (pointer.button === 2) this.#applyCapture(MOUSE_RIGHT);
+      return;
+    }
     const row = Math.floor((pointer.y - ROW_START) / ROW_HEIGHT);
     if (row >= 0 && row < BIND_ACTIONS.length) {
       if (this.#capturing && this.#index === row) {
@@ -187,7 +211,7 @@ export class SettingsScene extends Phaser.Scene {
     graphics.fillStyle(0x4a76b8, 1).fillRect(16, 14, VIEW_W - 32, 2);
 
     this.#text('CONTROLS & KEYBINDS', VIEW_W / 2, 22, '#e7c65b', { width: 400, align: 'center', scale: 1 });
-    this.#text('WASD AND ARROWS ALWAYS MOVE. LEFT CLICK ALWAYS BLOCKS.', VIEW_W / 2, 36, '#8c949a', {
+    this.#text('ENTER THEN A KEY OR MOUSE BUTTON. BACKSPACE CLEARS THE BIND.', VIEW_W / 2, 36, '#8c949a', {
       width: 430,
       align: 'center',
     });

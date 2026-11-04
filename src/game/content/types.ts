@@ -351,6 +351,9 @@ export interface Balance {
     speedCap: number;
     eliteHpMultiplier: number;
     eliteDamageMultiplier: number;
+    eliteChanceBase: number;
+    eliteChancePerFloor: number;
+    eliteChanceMax: number;
     affixPerAct: boolean;
   };
   floorScaling: {
@@ -424,8 +427,17 @@ export interface Balance {
   loot: {
     pityCommonsBeforeUncommon: number;
     rarityWeights: Record<string, Record<Rarity, number>>;
+    boss: {
+      itemsMin: number;
+      itemsMax: number;
+      tierPerFloor: number;
+    };
     cursedHpPenalty: number;
     cursedStatBonus: number;
+  };
+  /** The post-boss room where gear is upgraded by answering questions. */
+  lockerRoom: {
+    questions: number;
   };
   meta: {
     reportCardThresholds: number[];

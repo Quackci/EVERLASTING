@@ -47,12 +47,15 @@
     "roomClearHealPercent": 0.1
   },
   "enemyScaling": {
-    "hpGrowthPerFloor": 0.24,
-    "damageGrowthPerFloor": 0.16,
-    "speedGrowthPerFloor": 0.03,
-    "speedCap": 1.35,
+    "hpGrowthPerFloor": 0.34,
+    "damageGrowthPerFloor": 0.24,
+    "speedGrowthPerFloor": 0.04,
+    "speedCap": 1.45,
     "eliteHpMultiplier": 2.2,
     "eliteDamageMultiplier": 1.4,
+    "eliteChanceBase": 0.06,
+    "eliteChancePerFloor": 0.02,
+    "eliteChanceMax": 0.3,
     "affixPerAct": true
   },
   "floorScaling": {
@@ -135,8 +138,16 @@
       "floor7": { "common": 32, "uncommon": 34, "rare": 20, "custom": 8, "cursed": 6 },
       "floor10": { "common": 22, "uncommon": 32, "rare": 26, "custom": 12, "cursed": 8 }
     },
+    "boss": {
+      "itemsMin": 2,
+      "itemsMax": 3,
+      "tierPerFloor": 0.45
+    },
     "cursedHpPenalty": 20,
     "cursedStatBonus": 0.3
+  },
+  "lockerRoom": {
+    "questions": 3
   },
   "meta": {
     "reportCardThresholds": [20, 60, 120],

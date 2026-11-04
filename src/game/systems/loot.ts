@@ -106,6 +106,67 @@ export function rollChestLoot(
   return { rarity, smarts, items: picked };
 }
 
+/** Reverse of RARITY_TIER, for naming the band a boss drop belongs to. */
+export const RARITY_BY_TIER: Readonly<Record<number, Rarity>> = {
+  1: 'common',
+  2: 'uncommon',
+  3: 'rare',
+  4: 'custom',
+  5: 'cursed',
+};
+
+/**
+ * The item tier a boss invests in. Depth is the only input, so a floor 7 boss
+ * hands out gear the next act can actually use instead of reskinned floor 1
+ * loot that the player has already outgrown.
+ */
+export function bossLootTier(floor: number, balance: Balance): number {
+  const growth = Math.max(0, floor - 1) * balance.loot.boss.tierPerFloor;
+  return Math.max(1, Math.min(5, Math.round(1 + growth)));
+}
+
+export interface BossLootRoll extends LootRoll {
+  tier: number;
+}
+
+/**
+ * Rolls a boss payout: one guaranteed weapon of the stage's tier plus enough
+ * extra pieces to feel like a reward. Items are unique within the drop.
+ */
+export function rollBossLoot(
+  rng: Rng,
+  floor: number,
+  balance: Balance,
+  items: readonly ItemDef[],
+): BossLootRoll {
+  const tier = bossLootTier(floor, balance);
+  const config = balance.loot.boss;
+  const wanted = rng.range(config.itemsMin, Math.max(config.itemsMin, config.itemsMax));
+  const pool = itemsForTier(tier, items);
+  const exact = pool.filter((item) => item.tier === tier);
+  const source = exact.length > 0 ? exact : pool;
+  const picked: ItemDef[] = [];
+
+  const weapons = source.filter((item) => item.kind === 'weapon');
+  if (weapons.length > 0) {
+    const [first] = weapons.splice(rng.int(weapons.length), 1);
+    if (first) picked.push(first);
+  }
+
+  const rest = source.filter((item) => !picked.includes(item));
+  while (picked.length < wanted && rest.length > 0) {
+    const [item] = rest.splice(rng.int(rest.length), 1);
+    if (item) picked.push(item);
+  }
+
+  return {
+    rarity: RARITY_BY_TIER[tier] ?? 'rare',
+    smarts: 0,
+    items: picked,
+    tier,
+  };
+}
+
 /** The reward for a correct bonus question: one tier, and the stats that follow. */
 export function upgradeItem(item: ItemDef): ItemDef {
   const tier = Math.min(5, item.tier + 1);

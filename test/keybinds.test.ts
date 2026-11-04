@@ -3,6 +3,7 @@ import {
   BIND_ACTIONS,
   DEFAULT_KEYBINDS,
   MOUSE_LEFT,
+  MOUSE_RIGHT,
   assignBind,
   conflictOf,
   defaultKeybinds,
@@ -103,5 +104,20 @@ describe('keybinds', () => {
     expect(restored).toEqual(defaultKeybinds());
     expect(storage.data.size).toBe(0);
     expect(loadKeybinds(storage)).toEqual(defaultKeybinds());
+  });
+});
+
+describe('mouse bindings', () => {
+  it('names and accepts both mouse buttons', () => {
+    expect(keyName(MOUSE_LEFT)).toBe('LEFT CLICK');
+    expect(keyName(MOUSE_RIGHT)).toBe('RIGHT CLICK');
+    expect(isBindableCode(MOUSE_RIGHT)).toBe(true);
+  });
+
+  it('lets an action move onto the right button without duplicating it', () => {
+    const result = assignBind(defaultKeybinds(), 'attack', MOUSE_RIGHT);
+    expect(result.accepted).toBe(true);
+    expect(result.binds.attack).toBe(MOUSE_RIGHT);
+    expect(assignBind(result.binds, 'dodge', MOUSE_RIGHT).conflict).toBe('attack');
   });
 });

@@ -104,6 +104,40 @@ export function validateContent(content: ContentBundle): ValidationIssue[] {
       }
     }
   }
+  const scaling = balance.enemyScaling;
+  if (!scaling) {
+    push('balance.enemyScaling', 'needs an enemy scaling block');
+  } else {
+    for (const field of ['hpGrowthPerFloor', 'damageGrowthPerFloor', 'speedGrowthPerFloor'] as const) {
+      const value = scaling[field];
+      if (!isFiniteNumber(value) || value < 0) {
+        push(`balance.enemyScaling.${field}`, 'must be zero or a positive growth rate');
+      }
+    }
+    for (const field of ['eliteChanceBase', 'eliteChancePerFloor'] as const) {
+      const value = scaling[field];
+      if (!isFiniteNumber(value) || value < 0 || value > 1) {
+        push(`balance.enemyScaling.${field}`, 'must be a fraction between 0 and 1');
+      }
+    }
+  }
+  const bossLoot = balance.loot?.boss;
+  if (!bossLoot) {
+    push('balance.loot.boss', 'needs a boss loot block');
+  } else {
+    if (!Number.isInteger(bossLoot.itemsMin) || bossLoot.itemsMin < 1) {
+      push('balance.loot.boss.itemsMin', 'must be a positive whole number of items');
+    }
+    if (!Number.isInteger(bossLoot.itemsMax) || bossLoot.itemsMax < bossLoot.itemsMin) {
+      push('balance.loot.boss.itemsMax', 'must be at least itemsMin');
+    }
+    if (!isFiniteNumber(bossLoot.tierPerFloor) || bossLoot.tierPerFloor <= 0) {
+      push('balance.loot.boss.tierPerFloor', 'must be a positive tier growth per floor');
+    }
+  }
+  if (!Number.isInteger(balance.lockerRoom?.questions) || balance.lockerRoom.questions < 1) {
+    push('balance.lockerRoom.questions', 'must be a positive whole number of questions');
+  }
   const weightKeys = Object.keys(balance.loot?.rarityWeights ?? {});
   if (weightKeys.length < 4) {
     push('balance.loot.rarityWeights', 'expected weight tables for floors 1, 4, 7 and 10');

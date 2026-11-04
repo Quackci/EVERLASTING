@@ -44,6 +44,8 @@ import {
 } from '../systems/enemy';
 import {
   BIND_ACTIONS,
+  MOUSE_LEFT,
+  MOUSE_RIGHT,
   keyName,
   loadKeybinds,
   type BindAction,
@@ -52,6 +54,7 @@ import {
 import {
   pickBonusQuestion,
   presentQuestion,
+  rollBossLoot,
   rollChestLoot,
   upgradeItem,
   upgradeTarget,
@@ -68,6 +71,10 @@ interface RunSceneData {
   smarts?: number;
   unlocked?: string[];
   hp?: number;
+  /** Gear survives the stairs, so these carry the bag between floors. */
+  inventory?: ItemDef[];
+  weapon?: ItemDef | null;
+  armor?: ItemDef | null;
 }
 
 interface EnemyActor {
@@ -114,7 +121,17 @@ interface Hotspot {
   run: () => void;
 }
 
-type OverlayKind = 'none' | 'paused' | 'inventory' | 'loot' | 'loot-question' | 'loot-result' | 'skills';
+type OverlayKind =
+  | 'none'
+  | 'paused'
+  | 'inventory'
+  | 'loot'
+  | 'loot-question'
+  | 'loot-result'
+  | 'skills'
+  | 'locker'
+  | 'locker-question'
+  | 'locker-result';
 
 const TILE = BALANCE.world.tileSize;
 const VIEW_W = BALANCE.world.viewWidth;
@@ -205,6 +222,16 @@ export class RunScene extends Phaser.Scene {
   #pendingLoot: PendingLoot | null = null;
   #presented: PresentedQuestion | null = null;
 
+  #restoredInventory: ItemDef[] | null = null;
+  #restoredWeapon: ItemDef | null = null;
+  #restoredArmor: ItemDef | null = null;
+
+  #lockerDoor: { sprite: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image | null } | null = null;
+  #lockerUsed = false;
+  #lockerAttempts = 0;
+  #lockerIndex = 0;
+  #lockerTarget: ItemDef | null = null;
+
   #hpBar!: Phaser.GameObjects.Graphics;
   #hpLabel!: PixelLabel;
   #inkBar!: Phaser.GameObjects.Graphics;
@@ -230,6 +257,9 @@ export class RunScene extends Phaser.Scene {
     this.#lootRng = createRng(this.#seed).fork(`loot-${this.#floor}`);
     this.#questionRng = createRng(this.#seed).fork(`quiz-${this.#floor}`);
     this.#ambientRng = createRng(this.#seed).fork(`ambient-${this.#floor}`);
+    this.#restoredInventory = data.inventory ? [...data.inventory] : null;
+    this.#restoredWeapon = data.weapon ?? null;
+    this.#restoredArmor = data.armor ?? null;
     this.#weapon = starterWeapon();
     this.#armor = null;
     this.#inventory = [this.#weapon];
@@ -265,6 +295,11 @@ export class RunScene extends Phaser.Scene {
     this.#hotspots = [];
     this.#pendingLoot = null;
     this.#presented = null;
+    this.#lockerDoor = null;
+    this.#lockerUsed = false;
+    this.#lockerAttempts = 0;
+    this.#lockerIndex = 0;
+    this.#lockerTarget = null;
   }
 
   create(): void {
@@ -659,12 +694,19 @@ export class RunScene extends Phaser.Scene {
         return;
       }
       if (this.#dead) return;
+      // The mouse follows the binds: an action moved onto a mouse button
+      // fires there, and an unbound one stops responding on that button.
       if (pointer.leftButtonDown()) {
-        this.#pointerBlocking = true;
+        if (this.#binds.attack === MOUSE_LEFT) this.#swing(this.time.now);
+        else this.#pointerBlocking = true;
         return;
       }
-      if (pointer.rightButtonDown() && !this.#blocking) {
-        this.#swing(this.time.now);
+      if (pointer.rightButtonDown()) {
+        if (this.#binds.block === MOUSE_RIGHT) {
+          this.#pointerBlocking = true;
+          return;
+        }
+        if (!this.#blocking) this.#swing(this.time.now);
       }
     });
     this.input.on('pointerup', () => {
@@ -1095,6 +1137,213 @@ export class RunScene extends Phaser.Scene {
     this.#showToast(gained > 0 ? `ROOM CLEAR. +${gained} HP.` : 'ROOM CLEAR.', 1500);
   }
 
+  /** Upgrades an item and keeps the bag, weapon and armor references in sync. */
+  #upgradeInPlace(target: ItemDef): ItemDef {
+    const upgraded = upgradeItem(target);
+    const at = this.#inventory.indexOf(target);
+    if (at >= 0) this.#inventory[at] = upgraded;
+    if (this.#weapon === target) this.#weapon = upgraded;
+    if (this.#armor === target) this.#armor = upgraded;
+    if (this.#lockerTarget === target) this.#lockerTarget = upgraded;
+    this.#refreshHud();
+    return upgraded;
+  }
+
+  /** Boss payout: stage-scaled gear, then the door to the locker room. */
+  #dropBossLoot(roomId: number, x: number, y: number): void {
+    const loot = rollBossLoot(this.#lootRng, this.#floor, BALANCE, ITEMS);
+    for (const item of loot.items) this.#inventory.push(item);
+    this.#spawnLockerRoom(roomId, x, y);
+    this.#refreshHud();
+    this.time.delayedCall(900, () => {
+      if (this.#dead) return;
+      this.#pendingLoot = { items: loot.items, smarts: loot.smarts, rarity: loot.rarity, furniture: 'locker' };
+      this.#openLootPanel();
+    });
+  }
+
+  #spawnLockerRoom(roomId: number, fallbackX: number, fallbackY: number): void {
+    const room = this.#plan.rooms.find((candidate) => candidate.id === roomId);
+    const doorX = room ? room.cx * TILE + TILE / 2 : fallbackX;
+    const doorY = room ? room.cy * TILE + TILE / 2 : fallbackY;
+    const sprite = this.add.image(doorX, doorY, chestTextureKey('locker', false)).setDepth(Math.round(doorY) + 1);
+    const glow = this.add
+      .image(doorX, doorY, 'glow')
+      .setDepth(sprite.depth - 1)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(0.7)
+      .setScale(2.2);
+    this.tweens.add({ targets: glow, alpha: { from: 0.4, to: 0.95 }, duration: 900, yoyo: true, repeat: -1 });
+    this.#lockerDoor = { sprite, glow };
+    this.#lockerUsed = false;
+  }
+
+  #openLockerRoom(): void {
+    if (this.#lockerUsed) {
+      this.#showToast('THE LOCKER ROOM IS CLOSED. ONE VISIT PER BOSS.', 1800);
+      return;
+    }
+    this.#lockerAttempts = Math.max(1, BALANCE.lockerRoom.questions);
+    this.#lockerIndex = 0;
+    this.#lockerTarget = null;
+    this.#openOverlay('locker');
+    this.#renderLockerRoom();
+  }
+
+  #renderLockerRoom(): void {
+    this.#resetOverlayContent();
+    this.#panel(24, 18, 432, 234);
+    this.#text('LOCKER ROOM', 38, 26, '#e7c65b', { width: 240 });
+    const left = `${this.#lockerAttempts} QUESTION${this.#lockerAttempts === 1 ? '' : 'S'} LEFT`;
+    this.#text(left, VIEW_W - 38, 26, '#a9c4a0', { width: 170, align: 'right' });
+    this.#text('PICK A PIECE OF GEAR. A RIGHT ANSWER UPGRADES IT A TIER.', 38, 40, '#8c949a', {
+      width: 410,
+    });
+
+    const count = this.#inventory.length;
+    this.#lockerIndex = Math.max(0, Math.min(this.#lockerIndex, count - 1));
+    const start = Math.max(
+      0,
+      Math.min(this.#lockerIndex - Math.floor(INVENTORY_ROWS / 2), count - INVENTORY_ROWS),
+    );
+    for (let row = 0; row < INVENTORY_ROWS; row += 1) {
+      const index = start + row;
+      const item = this.#inventory[index];
+      if (!item) break;
+      const y = 58 + row * 15;
+      const selected = index === this.#lockerIndex;
+      if (selected) this.#overlayGfx?.fillStyle(0x233040, 1).fillRect(34, y - 3, 412, 14);
+      this.#icon(item, 42, y + 3);
+      this.#text(item.name.toUpperCase(), 54, y, selected ? '#e7c65b' : '#b9c0c4', { width: 250 });
+      const right =
+        item.kind === 'weapon' ? `T${item.tier}  ${item.damage} DMG` : `T${item.tier}  ARM ${item.armorValue ?? 0}`;
+      this.#text(right, 300, y, '#8c949a', { width: 130, align: 'right' });
+      this.#addHotspot(34, y - 3, 412, 14, () => {
+        this.#lockerIndex = index;
+        this.#renderLockerRoom();
+      });
+    }
+
+    if (count === 0) {
+      this.#text('NOTHING IN THE BAG TO UPGRADE.', VIEW_W / 2, 120, '#b9c0c4', { width: 360, align: 'center' });
+    }
+    this.#overlayGfx?.fillStyle(0x233040, 1).fillRect(150, 196, 180, 18);
+    this.#text('ENTER  ANSWER THE QUESTION', VIEW_W / 2, 201, '#e7c65b', { width: 300, align: 'center' });
+    this.#addHotspot(150, 196, 180, 18, () => this.#openLockerQuestion(this.#inventory[this.#lockerIndex] ?? null));
+    this.#text(
+      `${keyName(this.#binds.up)}/${keyName(this.#binds.down)} SELECT   ${keyName(this.#binds.pause)} LEAVE`,
+      38,
+      230,
+      '#5f686f',
+      { width: 400 },
+    );
+  }
+
+  #openLockerQuestion(target: ItemDef | null): void {
+    if (!target) return;
+    this.#lockerTarget = target;
+    const question = pickBonusQuestion(this.#questionRng, QUESTIONS, this.#themeSubject());
+    this.#presented = presentQuestion(this.#questionRng, question);
+    this.#overlay = 'locker-question';
+    this.#resetOverlayContent();
+    this.#panel(24, 20, 432, 230);
+    this.#text(`LOCKER ROOM - ${target.name.toUpperCase()} ON THE BENCH`, VIEW_W / 2, 28, '#e7c65b', {
+      width: 400,
+      align: 'center',
+    });
+    this.#text(this.#presented.prompt, VIEW_W / 2, 46, '#eef3e6', {
+      width: 384,
+      maxLines: 3,
+      align: 'center',
+    });
+    this.#presented.choices.forEach((choice, index) => {
+      const y = 100 + index * 22;
+      this.#text(`${index + 1}. ${choice}`, 48, y, '#cfe3c0', { width: 390 });
+      this.#addHotspot(42, y - 4, 400, 19, () => this.#answerLockerQuestion(index));
+    });
+    this.#text(`${this.#lockerAttempts} LEFT. A WRONG ANSWER BURNS ONE.`, VIEW_W / 2, 212, '#8c949a', {
+      width: 380,
+      align: 'center',
+    });
+  }
+
+  #answerLockerQuestion(index: number): void {
+    const presented = this.#presented;
+    if (!presented) return;
+    const correct = index === presented.answerIndex;
+    let upgradedName = '';
+    let upgradedTier = 0;
+
+    if (correct && this.#lockerTarget) {
+      const upgraded = this.#upgradeInPlace(this.#lockerTarget);
+      upgradedName = upgraded.name.toUpperCase();
+      upgradedTier = upgraded.tier;
+      this.#spawnSparks(this.#player.x, this.#player.y - 8, 12);
+    }
+
+    this.#lockerAttempts = Math.max(0, this.#lockerAttempts - 1);
+    this.#overlay = 'locker-result';
+    this.#resetOverlayContent();
+    this.#panel(40, 40, 400, 190);
+    this.#text(correct ? 'CORRECT - GEAR UPGRADED' : 'NOT QUITE - NO UPGRADE', VIEW_W / 2, 50, correct ? '#a9c4a0' : '#c8453f', {
+      width: 360,
+      align: 'center',
+    });
+    this.#text(
+      correct && upgradedName
+        ? `${upgradedName} IS NOW TIER ${upgradedTier}.`
+        : `THE ANSWER WAS: ${presented.choices[presented.answerIndex] ?? ''}`,
+      VIEW_W / 2,
+      72,
+      '#eef3e6',
+      { width: 350, maxLines: 2, align: 'center' },
+    );
+    this.#text(presented.explanation, VIEW_W / 2, 116, '#b9c0c4', {
+      width: 350,
+      maxLines: 3,
+      align: 'center',
+    });
+    this.#text(this.#lockerAttempts > 0 ? 'SPACE  NEXT ITEM' : 'SPACE  LEAVE', VIEW_W / 2, 196, '#8c949a', {
+      width: 350,
+      align: 'center',
+    });
+    this.#addHotspot(40, 40, 400, 190, () => this.#leaveLockerResult());
+    this.#refreshHud();
+  }
+
+  #leaveLockerResult(): void {
+    this.#presented = null;
+    if (this.#lockerAttempts > 0) {
+      this.#overlay = 'locker';
+      this.#renderLockerRoom();
+      return;
+    }
+    this.#finishLockerRoom();
+  }
+
+  #skipLockerQuestion(): void {
+    this.#presented = null;
+    this.#lockerAttempts = Math.max(0, this.#lockerAttempts - 1);
+    if (this.#lockerAttempts > 0) {
+      this.#overlay = 'locker';
+      this.#renderLockerRoom();
+      return;
+    }
+    this.#finishLockerRoom();
+  }
+
+  #finishLockerRoom(): void {
+    this.#lockerUsed = true;
+    this.#lockerTarget = null;
+    if (this.#lockerDoor?.glow) {
+      this.#lockerDoor.glow.destroy();
+      this.#lockerDoor.glow = null;
+    }
+    this.#lockerDoor?.sprite.setTint(0x6f7a80);
+    this.#closeOverlay();
+    this.#showToast('THE LOCKER ROOM GOES DARK. THE STAIRS ARE WAITING.', 2200);
+  }
+
   #cameras(): Phaser.Cameras.Scene2D.Camera {
     return this.cameras.main;
   }
@@ -1140,7 +1389,8 @@ export class RunScene extends Phaser.Scene {
       onComplete: () => enemy.sprite.destroy(),
     });
     if (enemy.def.role === 'boss') {
-      this.#showToast(`${enemy.def.name.toUpperCase()} FALLS. THE STAIRS ARE OPEN.`, 3200);
+      this.#showToast(`${enemy.def.name.toUpperCase()} FALLS. A LOCKER ROOM OPENS.`, 3200);
+      this.#dropBossLoot(enemy.roomId, enemy.sprite.x, enemy.sprite.y);
     } else if (enemy.def.role === 'elite') {
       this.#showToast(`${enemy.def.name.toUpperCase()} IS DOWN.`, 1800);
     }
@@ -1329,6 +1579,14 @@ export class RunScene extends Phaser.Scene {
       return;
     }
 
+    if (this.#lockerDoor && !this.#lockerUsed) {
+      const door = this.#lockerDoor.sprite;
+      if (Math.hypot(door.x - playerX, door.y - playerY) < 28) {
+        this.#openLockerRoom();
+        return;
+      }
+    }
+
     const gate = this.#gates.find(
       (candidate) =>
         !candidate.opened &&
@@ -1378,7 +1636,8 @@ export class RunScene extends Phaser.Scene {
     this.#panel(52, 38, 376, 194);
     const heading = pending.furniture === 'locker' ? 'THE LOCKER CLICKS OPEN' : 'THE DESK DRAWER OPENS';
     this.#text(heading, VIEW_W / 2, 48, '#e7c65b', { width: 350, align: 'center' });
-    this.#text(`${pending.rarity.toUpperCase()} FIND  +${pending.smarts} SMARTS`, VIEW_W / 2, 64, '#8c949a', {
+    const smarts = pending.smarts > 0 ? `  +${pending.smarts} SMARTS` : '';
+    this.#text(`${pending.rarity.toUpperCase()} FIND${smarts}`, VIEW_W / 2, 64, '#8c949a', {
       width: 350,
       align: 'center',
     });
@@ -1447,11 +1706,7 @@ export class RunScene extends Phaser.Scene {
     if (correct && pending) {
       const target = upgradeTarget(pending.items);
       if (target) {
-        const upgraded = upgradeItem(target);
-        const at = this.#inventory.indexOf(target);
-        if (at >= 0) this.#inventory[at] = upgraded;
-        if (this.#weapon === target) this.#weapon = upgraded;
-        if (this.#armor === target) this.#armor = upgraded;
+        const upgraded = this.#upgradeInPlace(target);
         pending.items = pending.items.map((item) => (item === target ? upgraded : item));
         upgradedName = upgraded.name.toUpperCase();
         upgradedTier = upgraded.tier;
@@ -1503,8 +1758,20 @@ export class RunScene extends Phaser.Scene {
     this.#blockReductionBonus = classDef.blockReductionBonus;
     this.#dodgeCooldownMult = classDef.dodgeCooldownMultiplier;
     this.#smartsMultiplier = difficulty.smartsMultiplier;
-    this.#weapon = starterWeapon(classDef.id);
-    this.#inventory = [this.#weapon];
+    if (this.#restoredInventory && this.#restoredInventory.length > 0) {
+      this.#inventory = [...this.#restoredInventory];
+      const carried = this.#restoredWeapon;
+      this.#weapon =
+        (carried && this.#inventory.includes(carried) ? carried : null) ??
+        this.#inventory.find((item) => item.kind === 'weapon') ??
+        starterWeapon(classDef.id);
+      this.#armor =
+        this.#restoredArmor && this.#inventory.includes(this.#restoredArmor) ? this.#restoredArmor : null;
+    } else {
+      this.#weapon = starterWeapon(classDef.id);
+      this.#inventory = [this.#weapon];
+      this.#armor = null;
+    }
     this.#recomputeStats();
     this.#ink = this.#inkMax;
   }
@@ -1673,6 +1940,9 @@ export class RunScene extends Phaser.Scene {
       smarts: this.#smarts,
       unlocked: this.#unlocked,
       hp: this.#hp,
+      inventory: this.#inventory,
+      weapon: this.#weapon,
+      armor: this.#armor,
     });
   }
 
@@ -1927,6 +2197,45 @@ export class RunScene extends Phaser.Scene {
       }
       case 'loot-result': {
         if (confirm || cancel) this.#closeOverlay();
+        break;
+      }
+      case 'locker': {
+        const count = this.#inventory.length;
+        if (count === 0) {
+          if (cancel) this.#closeOverlay();
+          return;
+        }
+        let moved = false;
+        if (this.#navJust('up')) {
+          this.#lockerIndex = (this.#lockerIndex + count - 1) % count;
+          moved = true;
+        }
+        if (this.#navJust('down')) {
+          this.#lockerIndex = (this.#lockerIndex + 1) % count;
+          moved = true;
+        }
+        if (moved) {
+          this.#renderLockerRoom();
+          return;
+        }
+        if (confirm) {
+          this.#openLockerQuestion(this.#inventory[this.#lockerIndex] ?? null);
+          return;
+        }
+        if (cancel || this.#justPressed('inventory')) this.#finishLockerRoom();
+        break;
+      }
+      case 'locker-question': {
+        if (cancel) {
+          this.#skipLockerQuestion();
+          return;
+        }
+        const digit = this.#digitPressed();
+        if (digit !== null) this.#answerLockerQuestion(digit);
+        break;
+      }
+      case 'locker-result': {
+        if (confirm || cancel) this.#leaveLockerResult();
         break;
       }
       case 'skills': {

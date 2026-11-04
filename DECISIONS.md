@@ -131,3 +131,28 @@ Short judgement calls made while building, with one line of rationale each.
     curve. Percentages rather than flat numbers keep the payout fair for the Hall
     Monitor's 135 HP and the Class Cutter's 80. A room pays once per floor and
     only if it actually spawned an enemy, so walking empty rooms cannot be farmed.
+42. **Enemies climb faster with depth** — HP growth per floor went from 0.24 to
+    0.34 and damage from 0.16 to 0.24, with the speed cap raised to 1.45. Elites
+    now spawn from a balance curve (`eliteChanceBase` + `eliteChancePerFloor`,
+    capped) instead of the hard-coded `0.08 + floor * 0.012`, so pressure per
+    floor is tunable in one place. A floor 10 normal enemy now carries roughly
+    four times its floor 1 HP instead of three.
+43. **Bosses drop stage-scaled gear** — a boss yields 2-3 unique items from the
+    tier its stage calls for (`bossLootTier`: round(1 + (floor-1) * 0.45), so
+    floor 4 pays tier 2, floor 7 tier 4 and floor 10 tier 5), one of them always
+    a weapon. Percentages of the run's own tier ladder rather than hand-authored
+    drops keep the payout correct if item content changes.
+44. **Gear survives the stairs** — the bag, equipped weapon and armor are passed
+    through the scene restart into the next floor instead of resetting to the
+    class starter. Without this, boss loot and locker-room upgrades would be
+    thrown away one floor later, which made both features pointless. Saves still
+    store the run's floor and stats rather than every item instance.
+45. **The locker room is the boss reward loop** — killing a boss spawns a lit
+    locker door in its room. Entering it offers `lockerRoom.questions` (3)
+    rounds: pick a piece of gear, then answer a question; a correct answer
+    upgrades that item one tier, a wrong one burns the round. One visit per boss
+    per floor, and the room locks behind you so it cannot be farmed for retries.
+46. **Mouse buttons are bindable** — the right button is now a first-class bind
+    code alongside the left, so attack or block can move onto either click.
+    The run's pointer handling reads the binds instead of hard-coding "left
+    guards, right swings", and Backspace clears a bind in the controls screen.
