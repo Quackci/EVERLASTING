@@ -8,7 +8,17 @@
  * plain grid.
  */
 import Phaser from 'phaser';
-import { ENEMIES, ITEMS, THEMES } from '../content';
+import { CLASSES, ENEMIES, ITEMS, THEMES } from '../content';
+import {
+  BASE_PLAYER_MAPS,
+  FACING_DIRS,
+  FRAMES_PER_DIRECTION,
+  classLook,
+  playerAnimKey,
+  playerTextureKey,
+  type ClassLook,
+  type FacingDir,
+} from './classSprites';
 import { PALETTE, type PaletteName } from './palette';
 
 const TILE = 16;
@@ -57,86 +67,25 @@ function box(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: 
 // Player: 16x16 student with outline, shading and a three-frame walk cycle.
 // ---------------------------------------------------------------------------
 
-const PLAYER_DOWN = [
-  '................',
-  '....kkkkkkkk....',
-  '...kjjjjjjjjk...',
-  '...kjCCCCCCjk...',
-  '...kjCkCCkCjk...',
-  '...kjCCCCCCjk...',
-  '....kCCCCCCk....',
-  '.....kCCCCk.....',
-  '....kbbbbbbk....',
-  '...kuuuuuuuuk...',
-  '..kuUuuuuuuUuk..',
-  '..kuCuuuuuuCuk..',
-  '..kuCuuuuuuCuk..',
-  '...kuuuuuuuuk...',
-  '.....ks..sk.....',
-  '....kww..wwk....',
-];
-
-const PLAYER_UP = [
-  '................',
-  '....kkkkkkkk....',
-  '...kjjjjjjjjk...',
-  '...kjjjjjjjjk...',
-  '...kjjjjjjjjk...',
-  '...kjjjjjjjjk...',
-  '....kjjjjjjk....',
-  '....kooooook....',
-  '....kooooook....',
-  '...kuuuuuuuuk...',
-  '..kuUuuuuuuUuk..',
-  '..kuCuuuuuuCuk..',
-  '..kuCuuuuuuCuk..',
-  '...kuuuuuuuuk...',
-  '.....ks..sk.....',
-  '....kww..wwk....',
-];
-
-const PLAYER_SIDE = [
-  '................',
-  '....kkkkkkk.....',
-  '...kjjjjjjjk....',
-  '...kjjCCCCCk....',
-  '...kjjCkCCCk....',
-  '...kjjCCCCCk....',
-  '....kjCCCCk.....',
-  '.....kCCCk......',
-  '....kbbbbbk.....',
-  '...kuuuuuuuk....',
-  '..kuUuuuuuuk....',
-  '..kuCuuuuuuk....',
-  '..kuCuuuuuuk....',
-  '...kuuuuuuuk....',
-  '....ks..sk......',
-  '...kww..wwk.....',
-];
-
-const PLAYER_MAPS: Record<string, string[]> = { down: PLAYER_DOWN, up: PLAYER_UP, side: PLAYER_SIDE };
-
-const PLAYER_COLORS: Record<string, PaletteName> = {
-  k: 'ink900',
-  j: 'ink800',
-  C: 'chalkLight',
-  b: 'bone',
-  u: 'blue',
-  U: 'blueDark',
-  s: 'slate',
-  w: 'ink900',
-  o: 'cork',
-};
-
-function drawPlayerFrame(ctx: CanvasRenderingContext2D, rows: string[], frame: number): void {
+function drawPlayerFrame(
+  ctx: CanvasRenderingContext2D,
+  dir: FacingDir,
+  frame: number,
+  look: ClassLook,
+): void {
+  const rows = BASE_PLAYER_MAPS[dir];
   const legShift = frame === 1 ? -1 : frame === 2 ? 1 : 0;
   const bob = frame === 1 ? -1 : 0;
+  const decor = new Map<string, string>();
+  for (const entry of look.decor[dir] ?? []) decor.set(`${entry.x},${entry.y}`, entry.ch);
+
   for (let y = 0; y < rows.length; y += 1) {
     const row = rows[y] ?? '';
     for (let x = 0; x < row.length; x += 1) {
-      const ch = row[x] ?? '.';
+      // Class details are painted over the shared skeleton after the base pixel.
+      const ch = decor.get(`${x},${y}`) ?? row[x] ?? '.';
       if (ch === '.' || ch === ' ') continue;
-      const name = PLAYER_COLORS[ch];
+      const name = look.colors[ch];
       if (!name) continue;
       const offsetX = y >= 14 ? legShift : 0;
       const offsetY = y < 14 ? bob : 0;
@@ -826,16 +775,25 @@ export function generateArt(scene: Phaser.Scene, viewWidth = 480, viewHeight = 2
     );
   }
 
-  for (const [direction, rows] of Object.entries(PLAYER_MAPS)) {
-    for (let frame = 0; frame < 3; frame += 1) {
-      makeCanvasTexture(scene, `player-${direction}-${frame}`, 16, 16, (ctx) => drawPlayerFrame(ctx, rows, frame));
+  for (const cls of CLASSES) {
+    const look = classLook(cls.id);
+    for (const direction of FACING_DIRS) {
+      for (let frame = 0; frame < FRAMES_PER_DIRECTION; frame += 1) {
+        makeCanvasTexture(scene, playerTextureKey(cls.id, direction, frame), 16, 16, (ctx) =>
+          drawPlayerFrame(ctx, direction, frame, look),
+        );
+      }
+      const key = playerAnimKey(cls.id, direction);
+      if (scene.anims.exists(key)) scene.anims.remove(key);
+      scene.anims.create({
+        key,
+        frames: Array.from({ length: FRAMES_PER_DIRECTION }, (_unused, frame) => ({
+          key: playerTextureKey(cls.id, direction, frame),
+        })),
+        frameRate: look.walkFrameRate,
+        repeat: -1,
+      });
     }
-    scene.anims.create({
-      key: `walk-${direction}`,
-      frames: [0, 1, 2].map((frame) => ({ key: `player-${direction}-${frame}` })),
-      frameRate: 9,
-      repeat: -1,
-    });
   }
 
   for (const enemy of ENEMIES) {

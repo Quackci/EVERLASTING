@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { BALANCE, CLASSES, ITEM_BY_ID } from '../content';
 import { PixelLabel } from '../art/text';
 import { paletteHex } from '../art/sprites';
+import { playerTextureKey } from '../art/classSprites';
 
 const VIEW_W = BALANCE.world.viewWidth;
 const VIEW_H = BALANCE.world.viewHeight;
@@ -20,6 +21,7 @@ export class CharacterScene extends Phaser.Scene {
   #seed = 1;
   #gfx?: Phaser.GameObjects.Graphics;
   #labels: PixelLabel[] = [];
+  #previews: Phaser.GameObjects.Image[] = [];
   #keyHandler?: (event: KeyboardEvent) => void;
 
   constructor() {
@@ -41,6 +43,7 @@ export class CharacterScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (this.#keyHandler) this.input.keyboard?.off('keydown', this.#keyHandler);
       this.#clearLabels();
+      this.#clearPreviews();
     });
   }
 
@@ -104,8 +107,14 @@ export class CharacterScene extends Phaser.Scene {
     this.#labels = [];
   }
 
+  #clearPreviews(): void {
+    for (const preview of this.#previews) preview.destroy();
+    this.#previews = [];
+  }
+
   #render(): void {
     this.#clearLabels();
+    this.#clearPreviews();
     const graphics = this.#gfx;
     if (!graphics) return;
     graphics.clear();
@@ -134,8 +143,17 @@ export class CharacterScene extends Phaser.Scene {
       const hp = Math.round(BALANCE.player.baseHp * cls.hpMultiplier);
       const speed = Math.round(BALANCE.player.moveSpeed * cls.moveSpeedMultiplier);
 
-      this.#text(cls.title, x + 6, CARD_TOP + 6, selected ? '#e7c65b' : '#8c949a', { width: 92 });
-      this.#text(cls.name.toUpperCase(), x + 6, CARD_TOP + 16, '#eef3e6', { width: 92, maxLines: 2 });
+      // Each card shows the class's actual in-game sprite so the look is
+      // obvious before a run starts, not just the stats.
+      const preview = this.add
+        .image(x + CARD_WIDTH - 18, CARD_TOP + 20, playerTextureKey(cls.id, 'down', 0))
+        .setScale(1.5)
+        .setDepth(1);
+      if (!selected) preview.setAlpha(0.72);
+      this.#previews.push(preview);
+
+      this.#text(cls.title, x + 6, CARD_TOP + 6, selected ? '#e7c65b' : '#8c949a', { width: 66 });
+      this.#text(cls.name.toUpperCase(), x + 6, CARD_TOP + 16, '#eef3e6', { width: 66, maxLines: 2 });
       this.#text(`HP ${hp}  SPD ${speed}`, x + 6, CARD_TOP + 42, '#a9c4a0', { width: 92 });
       this.#text(`DMG ${weapon?.damage ?? 0}`, x + 6, CARD_TOP + 52, '#8c949a', { width: 92 });
       this.#text('PROS', x + 6, CARD_TOP + 68, '#6fae5f', { width: 92 });

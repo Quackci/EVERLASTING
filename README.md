@@ -138,6 +138,16 @@ number:
 | Hall Monitor | Tank | +35% HP, 6 armour, stronger blocks | Slow, long dodge cooldown, no crits |
 | Class Cutter | Assassin | +12% crit, fast feet, short dodge cooldown | 20% less HP and no armour |
 
+Each student also looks the part, with their own hand-authored 16x16 sprite for
+every facing direction and walk frame: the Field Tripper wears the blue blazer
+and school badge, the Arrow-Demic a teal hood, rubber-band sling and pencil
+quiver, the Hall Monitor a cap, shoulder pads and monitor badge, and the Class
+Cutter a pulled-up purple hood and pink scarf. They share one skeleton so they
+walk the same way, but the colours, headgear and props differ, and the walk cycle
+speed differs too (Hall Monitor 7fps, Class Cutter 12fps). The class-select cards
+show the real in-game sprite, and the looks are defined in
+`src/game/art/classSprites.ts`.
+
 Three difficulties are chosen once per run: **Pop Quiz** (softer enemies, more
 Smarts), **Midterm** (the balanced default) and **Final Exam** (30% tougher
 enemies, leaner loot).
@@ -161,11 +171,13 @@ upgrade.
 
 ## Play in a browser (GitHub Pages)
 
-The renderer is a plain Vite build, so the same game runs on the web. Push this
-repository to GitHub, then open **Settings -> Pages** and set **Source** to
-**GitHub Actions**. The `Publish playable build` workflow
-(`.github/workflows/pages.yml`) typechecks, tests, builds and deploys on every
-push to `main`, and the game appears at `https://<user>.github.io/<repo>/`.
+The renderer is a plain Vite build, so the same game runs on the web. Pages is
+enabled on this repository with **Source: GitHub Actions**, so the game is live
+at [quackci.github.io/EVERLASTING](https://quackci.github.io/EVERLASTING/). The
+`Publish playable build` workflow (`.github/workflows/pages.yml`) typechecks,
+tests, builds and deploys on every push to `main`. A fork has to enable Pages
+once under **Settings -> Pages -> Source: GitHub Actions**, otherwise the
+`configure-pages` step fails with "Get Pages site failed".
 
 Asset paths are relative (`base: './'` in `vite.config.ts`), so a project-page
 subpath works with no extra configuration, and the browser build is the same

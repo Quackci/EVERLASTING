@@ -14,6 +14,7 @@ import {
   SKILL_BY_ID,
 } from '../content';
 import { chestTextureKey, ensureItemIcon, ensurePropTexture, enemyTextureKey } from '../art/sprites';
+import { playerAnimKey, playerTextureKey } from '../art/classSprites';
 import { PixelLabel } from '../art/text';
 import { createRng, weightedPick, type Rng } from '../core/rng';
 import type { DifficultyDef, EnemyDef, ItemDef, PerkEffects, SkillDef, Subject } from '../content/types';
@@ -463,7 +464,7 @@ export class RunScene extends Phaser.Scene {
     const spawn = this.#plan.spawn;
     this.#playerShadow = this.add.image(spawn.x * TILE + TILE / 2, spawn.y * TILE + TILE / 2 + 5, 'shadow').setDepth(19).setAlpha(0.5);
     this.#player = this.physics.add
-      .sprite(spawn.x * TILE + TILE / 2, spawn.y * TILE + TILE / 2, 'player-down-0')
+      .sprite(spawn.x * TILE + TILE / 2, spawn.y * TILE + TILE / 2, playerTextureKey(this.#classId, 'down', 0))
       .setDepth(20);
     this.#player.setSize(10, 8);
     this.#player.setOffset(3, 7);
@@ -898,14 +899,15 @@ export class RunScene extends Phaser.Scene {
     if (!moving) {
       if (!this.#idleFrame) {
         this.#player.anims.stop();
-        this.#player.setTexture(`player-${this.#facingDir}-0`);
+        this.#player.setTexture(playerTextureKey(this.#classId, this.#facingDir, 0));
         this.#idleFrame = true;
       }
       return;
     }
     this.#idleFrame = false;
-    if (this.#player.anims.currentAnim?.key !== `walk-${this.#facingDir}`) {
-      this.#player.anims.play(`walk-${this.#facingDir}`, true);
+    const walk = playerAnimKey(this.#classId, this.#facingDir);
+    if (this.#player.anims.currentAnim?.key !== walk) {
+      this.#player.anims.play(walk, true);
     }
   }
 

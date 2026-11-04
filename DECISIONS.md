@@ -156,3 +156,13 @@ Short judgement calls made while building, with one line of rationale each.
     code alongside the left, so attack or block can move onto either click.
     The run's pointer handling reads the binds instead of hard-coding "left
     guards, right swings", and Backspace clears a bind in the controls screen.
+47. **One sprite set per class** — all four students share the same 16x16
+    skeleton so they animate identically, but each class recolours it and paints
+    a signature detail over the top: the Field Tripper's blazer badge and pack
+    straps, the Arrow-Demic's teal hood, rubber-band sling and pencil quiver,
+    the Hall Monitor's cap, shoulder pads and badge, and the Class Cutter's
+    hood shadow and pink scarf. The Hall Monitor walks on a slower 7fps cycle
+    and the Cutter on 12fps so silhouette and stats agree. The look table lives
+    in `src/game/art/classSprites.ts` with no Phaser import, which is what lets
+    the pixel data, palette usage and texture keys be unit tested; class-select
+    cards render the real in-game sprite instead of a separate portrait.
