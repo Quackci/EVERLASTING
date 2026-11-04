@@ -85,6 +85,15 @@ Both payouts are percentages, so the Hall Monitor's 135 HP bar and the Class
 Cutter's 80 scale the same way, and both numbers live in
 `src/game/content/balance.json`.
 
+## Play and download
+
+- **In your browser, no install:** [quackci.github.io/EVERLASTING](https://quackci.github.io/EVERLASTING/)
+- **Windows (portable) and Linux (AppImage):** [latest beta release](https://github.com/Quackci/EVERLASTING/releases/latest)
+- **Web build zip:** attached to the same release if you want to host it yourself
+
+The browser build is published by the `Publish playable build` workflow on every
+push to `main`, so the link above is always the current commit.
+
 ## Controls and keybinds
 
 Every action on the controls screen is rebindable, and the two mouse buttons are
