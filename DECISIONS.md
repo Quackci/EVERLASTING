@@ -166,3 +166,21 @@ Short judgement calls made while building, with one line of rationale each.
     in `src/game/art/classSprites.ts` with no Phaser import, which is what lets
     the pixel data, palette usage and texture keys be unit tested; class-select
     cards render the real in-game sprite instead of a separate portrait.
+48. **The player body is snapped out of walls rather than trusted to physics** —
+    a 250 px/s dodge, or a knockback, can be separated into the far side of a
+    wall run, and two wall zones meeting at a corner leave the body with no
+    valid separation axis, which is how a dodge used to end with the player
+    stuck inside geometry. `systems/collision.ts` tests the body rectangle
+    against the tile map and the scene remembers the last clear position, so the
+    moment the body is inside a wall it is put back on the nearest floor tile (or
+    the last clear spot) and the dodge or knockback is cancelled. The tile map,
+    not the physics solver, is the authority, and the geometry is unit tested
+    against hand-built grids and real generated floors.
+49. **The bag is a grid, not a list** — nine pockets per page with page tabs
+    built from `ui/bag.ts`, kept Phaser-free so layout and selection wrapping
+    are unit tested. Horizontal movement flows across page boundaries while
+    vertical movement stays on the page, so the whole bag is reachable with four
+    keys and a click is never required. Overlay chrome became a wooden-framed
+    chalkboard with light chalk text, which is why every hint line in the
+    overlays moved from grey to chalk colours; dark selection bars were replaced
+    by a chalk wash plus a yellow tick so they stay readable on green.

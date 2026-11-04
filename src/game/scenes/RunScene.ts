@@ -62,6 +62,15 @@ import {
   type PresentedQuestion,
 } from '../systems/loot';
 import { clearSlot, makeSave, writeSlot } from '../systems/save';
+import { nearestFreeSpot, overlapsWall } from '../systems/collision';
+import {
+  BAG_SLOTS,
+  bagPageCount,
+  bagPageOf,
+  bagSlotRect,
+  moveBagSelection,
+  type BagDirection,
+} from '../ui/bag';
 
 interface RunSceneData {
   seed: number;
@@ -193,6 +202,8 @@ export class RunScene extends Phaser.Scene {
   #dodgeReadyAt = 0;
   #invulnUntil = 0;
   #knockbackUntil = 0;
+  #safeX = 0;
+  #safeY = 0;
   #dead = false;
   #facingDir: 'down' | 'up' | 'side' = 'down';
   #facing = { x: 0, y: 1 };
@@ -470,6 +481,10 @@ export class RunScene extends Phaser.Scene {
     this.#player.setOffset(3, 7);
     this.#player.setCollideWorldBounds(true);
     this.physics.add.collider(this.#player, this.#wallZones);
+    // The wall guard snaps back here if a dodge or knockback is ever resolved
+    // into geometry, so the player never ends up stuck inside a wall.
+    this.#safeX = this.#player.x;
+    this.#safeY = this.#player.y;
     this.#blockArc = this.add.graphics().setDepth(21).setVisible(false);
 
     // Enemy shots die on walls and on the player; both paths clean up the image.
@@ -784,6 +799,7 @@ export class RunScene extends Phaser.Scene {
     this.#updateBlock(time);
 
     const body = this.#player.body as Phaser.Physics.Arcade.Body;
+    this.#keepOutOfWalls(time, body);
 
     if (!this.#blocking && this.#justPressed('sprint') && time >= this.#sprintReadyAt && moving) {
       this.#sprintUntil = time + BALANCE.player.sprintDurationMs;
@@ -863,10 +879,17 @@ export class RunScene extends Phaser.Scene {
     return key ? Phaser.Input.Keyboard.JustDown(key) : false;
   }
 
-  #navJust(direction: 'up' | 'down'): boolean {
+  #navJust(direction: BagDirection): boolean {
     const key = this.#bindKeys[direction];
     const bindHit = key ? Phaser.Input.Keyboard.JustDown(key) : false;
     return bindHit || Phaser.Input.Keyboard.JustDown(this.#arrows[direction]);
+  }
+
+  #bagDirectionPressed(): BagDirection | null {
+    for (const direction of ['up', 'down', 'left', 'right'] as const) {
+      if (this.#navJust(direction)) return direction;
+    }
+    return null;
   }
 
   #digitPressed(): number | null {
@@ -909,6 +932,32 @@ export class RunScene extends Phaser.Scene {
     if (this.#player.anims.currentAnim?.key !== walk) {
       this.#player.anims.play(walk, true);
     }
+  }
+
+  /**
+   * Arcade separation can resolve a fast dodge or a knockback into the far side
+   * of a wall run, or into a corner it cannot back out of. Rather than trust the
+   * solver, keep the last clear body position and snap back the moment the body
+   * is inside geometry, cancelling the impulse that put it there.
+   */
+  #keepOutOfWalls(time: number, body: Phaser.Physics.Arcade.Body): void {
+    const box = { halfWidth: body.halfWidth, halfHeight: body.halfHeight };
+    if (!overlapsWall(this.#plan, TILE, body.center.x, body.center.y, box)) {
+      this.#safeX = this.#player.x;
+      this.#safeY = this.#player.y;
+      return;
+    }
+    const spot = nearestFreeSpot(this.#plan, TILE, body.center.x, body.center.y, box);
+    const target = spot ?? { x: this.#safeX, y: this.#safeY };
+    const offsetX = this.#player.x - body.center.x;
+    const offsetY = this.#player.y - body.center.y;
+    this.#player.setPosition(target.x + offsetX, target.y + offsetY);
+    body.reset(this.#player.x, this.#player.y);
+    body.setVelocity(0, 0);
+    this.#safeX = this.#player.x;
+    this.#safeY = this.#player.y;
+    if (time < this.#dodgeUntil) this.#dodgeUntil = 0;
+    if (time < this.#knockbackUntil) this.#knockbackUntil = 0;
   }
 
   #updateBlock(time: number): void {
@@ -1198,7 +1247,7 @@ export class RunScene extends Phaser.Scene {
     this.#text('LOCKER ROOM', 38, 26, '#e7c65b', { width: 240 });
     const left = `${this.#lockerAttempts} QUESTION${this.#lockerAttempts === 1 ? '' : 'S'} LEFT`;
     this.#text(left, VIEW_W - 38, 26, '#a9c4a0', { width: 170, align: 'right' });
-    this.#text('PICK A PIECE OF GEAR. A RIGHT ANSWER UPGRADES IT A TIER.', 38, 40, '#8c949a', {
+    this.#text('PICK A PIECE OF GEAR. A RIGHT ANSWER UPGRADES IT A TIER.', 38, 40, '#cfe3c0', {
       width: 410,
     });
 
@@ -1214,7 +1263,7 @@ export class RunScene extends Phaser.Scene {
       if (!item) break;
       const y = 58 + row * 15;
       const selected = index === this.#lockerIndex;
-      if (selected) this.#overlayGfx?.fillStyle(0x233040, 1).fillRect(34, y - 3, 412, 14);
+      if (selected) this.#rowHighlight(34, y - 3, 412, 14);
       this.#icon(item, 42, y + 3);
       this.#text(item.name.toUpperCase(), 54, y, selected ? '#e7c65b' : '#b9c0c4', { width: 250 });
       const right =
@@ -1236,7 +1285,7 @@ export class RunScene extends Phaser.Scene {
       `${keyName(this.#binds.up)}/${keyName(this.#binds.down)} SELECT   ${keyName(this.#binds.pause)} LEAVE`,
       38,
       230,
-      '#5f686f',
+      '#a9c4a0',
       { width: 400 },
     );
   }
@@ -1263,7 +1312,7 @@ export class RunScene extends Phaser.Scene {
       this.#text(`${index + 1}. ${choice}`, 48, y, '#cfe3c0', { width: 390 });
       this.#addHotspot(42, y - 4, 400, 19, () => this.#answerLockerQuestion(index));
     });
-    this.#text(`${this.#lockerAttempts} LEFT. A WRONG ANSWER BURNS ONE.`, VIEW_W / 2, 212, '#8c949a', {
+    this.#text(`${this.#lockerAttempts} LEFT. A WRONG ANSWER BURNS ONE.`, VIEW_W / 2, 212, '#a9c4a0', {
       width: 380,
       align: 'center',
     });
@@ -1639,7 +1688,7 @@ export class RunScene extends Phaser.Scene {
     const heading = pending.furniture === 'locker' ? 'THE LOCKER CLICKS OPEN' : 'THE DESK DRAWER OPENS';
     this.#text(heading, VIEW_W / 2, 48, '#e7c65b', { width: 350, align: 'center' });
     const smarts = pending.smarts > 0 ? `  +${pending.smarts} SMARTS` : '';
-    this.#text(`${pending.rarity.toUpperCase()} FIND${smarts}`, VIEW_W / 2, 64, '#8c949a', {
+    this.#text(`${pending.rarity.toUpperCase()} FIND${smarts}`, VIEW_W / 2, 64, '#cfe3c0', {
       width: 350,
       align: 'center',
     });
@@ -1659,7 +1708,7 @@ export class RunScene extends Phaser.Scene {
     });
 
     this.#text('SPACE  BONUS QUESTION TO UPGRADE ONE', VIEW_W / 2, 186, '#e7c65b', { width: 360, align: 'center' });
-    this.#text(`${keyName(this.#binds.pause)}  TAKE IT AND GO`, VIEW_W / 2, 200, '#8c949a', {
+    this.#text(`${keyName(this.#binds.pause)}  TAKE IT AND GO`, VIEW_W / 2, 200, '#a9c4a0', {
       width: 360,
       align: 'center',
     });
@@ -1691,7 +1740,7 @@ export class RunScene extends Phaser.Scene {
       this.#text(`${index + 1}. ${choice}`, 48, y, '#cfe3c0', { width: 390 });
       this.#addHotspot(42, y - 4, 400, 19, () => this.#answerLootQuestion(index));
     });
-    this.#text('PRESS 1-4 OR CLICK AN ANSWER', VIEW_W / 2, 212, '#8c949a', {
+    this.#text('PRESS 1-4 OR CLICK AN ANSWER', VIEW_W / 2, 212, '#a9c4a0', {
       width: 380,
       align: 'center',
     });
@@ -1880,7 +1929,7 @@ export class RunScene extends Phaser.Scene {
       const available = this.#skillAvailable(skill);
       const affordable = this.#smarts >= skill.cost;
       const active = index === this.#skillIndex;
-      if (active) this.#overlayGfx?.fillStyle(0x233040, 1).fillRect(32, y - 3, 416, 20);
+      if (active) this.#rowHighlight(32, y - 3, 416, 20);
       const mark = owned ? '[X]' : available ? (affordable ? '[ ]' : '[/]') : '[-]';
       const color = owned ? '#a9c4a0' : available ? (affordable ? '#eef3e6' : '#8c949a') : '#5f686f';
       this.#text(`${mark} T${skill.tier}  ${skill.name.toUpperCase()}`, 38, y, active ? '#e7c65b' : color, {
@@ -1908,7 +1957,7 @@ export class RunScene extends Phaser.Scene {
             : 'ENTER TO LEARN.';
       this.#text(note, 38, 206, locked ? '#c8453f' : '#e7c65b', { width: 400 });
     }
-    this.#text('W/S SELECT   ENTER LEARN   K CLOSE', 38, 226, '#5f686f', { width: 400 });
+    this.#text('W/S SELECT   ENTER LEARN   K CLOSE', 38, 226, '#a9c4a0', { width: 400 });
   }
 
   #buySkill(): void {
@@ -1990,10 +2039,25 @@ export class RunScene extends Phaser.Scene {
   #panel(x: number, y: number, w: number, h: number): void {
     const graphics = this.#overlayGfx;
     if (!graphics) return;
-    graphics.fillStyle(0x0b0f12, 0.72).fillRect(0, 0, VIEW_W, VIEW_H);
-    graphics.fillStyle(0x1a2430, 0.97).fillRect(x, y, w, h);
-    graphics.lineStyle(1, 0xcfe3c0, 0.55).strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    graphics.fillStyle(0x4a76b8, 1).fillRect(x, y, w, 2);
+    graphics.fillStyle(0x0b0f12, 0.74).fillRect(0, 0, VIEW_W, VIEW_H);
+    // Classroom chalkboard in a wooden frame, with the chalk tray underneath.
+    graphics.fillStyle(0x654630, 1).fillRect(x - 4, y - 4, w + 8, h + 8);
+    graphics.fillStyle(0xa87c50, 1).fillRect(x - 4, y - 4, w + 8, 2);
+    graphics.fillStyle(0x417a45, 1).fillRect(x, y, w, h);
+    graphics.fillStyle(0xcfe3c0, 0.16).fillRect(x + 2, y + 2, w - 4, 1);
+    // Erased smudges, deliberately not aligned with anything else on the board.
+    graphics.fillStyle(0xcfe3c0, 0.05).fillRect(x + 12, y + h - 40, w - 60, 7);
+    graphics.fillStyle(0xcfe3c0, 0.04).fillRect(x + 40, y + 22, w - 120, 4);
+    graphics.fillStyle(0x8a6242, 1).fillRect(x, y + h + 2, w, 4);
+    graphics.fillStyle(0xeef3e6, 0.9).fillRect(x + 12, y + h + 3, 18, 2);
+  }
+
+  /** Selected row on a chalkboard: a chalk wash plus a yellow chalk tick. */
+  #rowHighlight(x: number, y: number, w: number, h: number): void {
+    const graphics = this.#overlayGfx;
+    if (!graphics) return;
+    graphics.fillStyle(0xcfe3c0, 0.12).fillRect(x, y, w, h);
+    graphics.fillStyle(0xe7c65b, 1).fillRect(x, y, 2, h);
   }
 
   #text(
@@ -2041,7 +2105,7 @@ export class RunScene extends Phaser.Scene {
     this.#text('PAUSED', VIEW_W / 2, 50, '#e7c65b', { width: 320, align: 'center', scale: 2 });
     const rows: { text: string; run: () => void }[] = [
       { text: `${keyName(this.#binds.pause)}   RESUME`, run: () => this.#closeOverlay() },
-      { text: `${keyName(this.#binds.inventory)}   INVENTORY`, run: () => this.#openInventory() },
+      { text: `${keyName(this.#binds.inventory)}   SCHOOL BAG`, run: () => this.#openInventory() },
       { text: 'K   SKILL TREE', run: () => this.#openSkills() },
       { text: 'C   CONTROLS & KEYBINDS', run: () => this.#openSettings() },
     ];
@@ -2050,7 +2114,7 @@ export class RunScene extends Phaser.Scene {
       this.#text(row.text, 96, y, index === 0 ? '#cfe3c0' : '#b9c0c4', { width: 280 });
       this.#addHotspot(84, y - 4, 300, 15, row.run);
     });
-    this.#text('LEFT CLICK GUARD, RIGHT CLICK SWING.\nLOCKERS GLOW WHEN THEY HOLD SOMETHING.', 96, 150, '#8c949a', {
+    this.#text('LEFT CLICK GUARD, RIGHT CLICK SWING.\nLOCKERS GLOW WHEN THEY HOLD SOMETHING.', 96, 150, '#a9c4a0', {
       width: 290,
       maxLines: 2,
     });
@@ -2068,49 +2132,151 @@ export class RunScene extends Phaser.Scene {
     this.#renderInventory();
   }
 
+  /**
+   * The bag: a chalk drawing of a backpack, a page of pocket slots, and the
+   * selected item on a sheet of ruled paper. Everything is still driven by the
+   * keyboard, so the click hotspots are a convenience rather than a requirement.
+   */
   #renderInventory(): void {
     this.#resetOverlayContent();
-    this.#panel(24, 18, 432, 234);
-    this.#text(`INVENTORY  ${this.#inventory.length} ITEMS`, 38, 28, '#e7c65b', { width: 400 });
-    this.#text(`EQUIPPED  ${this.#weapon.name.toUpperCase()}`, 38, 40, '#cfe3c0', { width: 400 });
-
+    this.#panel(16, 10, 448, 250);
     const count = this.#inventory.length;
-    if (count === 0) {
-      this.#text('EMPTY. OPEN A DESK.', VIEW_W / 2, 120, '#b9c0c4', { width: 360, align: 'center' });
-    }
-    this.#invIndex = Math.max(0, Math.min(this.#invIndex, count - 1));
-    const start = Math.max(0, Math.min(this.#invIndex - Math.floor(INVENTORY_ROWS / 2), count - INVENTORY_ROWS));
-    for (let row = 0; row < INVENTORY_ROWS; row += 1) {
-      const index = start + row;
-      const item = this.#inventory[index];
-      if (!item) break;
-      const y = 58 + row * 15;
-      const selected = index === this.#invIndex;
-      if (selected) {
-        this.#overlayGfx?.fillStyle(0x233040, 1).fillRect(34, y - 3, 412, 14);
-      }
-      this.#icon(item, 42, y + 3);
-      this.#text(item.name.toUpperCase(), 54, y, selected ? '#e7c65b' : '#b9c0c4', { width: 250 });
-      const right =
-        item.kind === 'weapon' ? `T${item.tier}  ${item.damage} DMG` : `T${item.tier}  ARM ${item.armorValue ?? 0}`;
-      this.#text(right, 300, y, '#8c949a', { width: 130, align: 'right' });
-      this.#addHotspot(34, y - 3, 412, 14, () => {
-        this.#invIndex = index;
+    this.#invIndex = Math.max(0, Math.min(this.#invIndex, Math.max(0, count - 1)));
+    const page = bagPageOf(this.#invIndex);
+    const pages = bagPageCount(count);
+
+    this.#text('SCHOOL BAG', 30, 16, '#e7c65b', { width: 220 });
+    this.#text(`${count} ITEM${count === 1 ? '' : 'S'}   PAGE ${page + 1}/${pages}`, 450, 16, '#cfe3c0', {
+      width: 220,
+      align: 'right',
+    });
+
+    this.#drawBackpack(30, 46);
+    this.#drawBagTabs(pages, page);
+    this.#drawBagGrid(page * BAG_SLOTS);
+    this.#drawBagCard(count === 0 ? null : this.#inventory[this.#invIndex] ?? null);
+
+    this.#text('ENTER  EQUIP IT', 30, 184, '#cfe3c0', { width: 240 });
+    this.#text(
+      `${keyName(this.#binds.up)}/${keyName(this.#binds.down)}/${keyName(this.#binds.left)}/${keyName(this.#binds.right)} SELECT   ${keyName(this.#binds.pause)} CLOSE`,
+      30,
+      200,
+      '#a9c4a0',
+      { width: 430 },
+    );
+  }
+
+  #drawBackpack(x: number, y: number): void {
+    const graphics = this.#overlayGfx;
+    if (!graphics) return;
+    graphics.fillStyle(0x11181f, 0.45).fillRect(x + 6, y + 96, 72, 6);
+    // Straps first, so the body covers their lower halves.
+    graphics.fillStyle(0x654630, 1).fillRect(x + 14, y, 8, 22);
+    graphics.fillStyle(0x654630, 1).fillRect(x + 62, y, 8, 22);
+    graphics.fillStyle(0x8a6242, 1).fillRect(x + 8, y + 14, 68, 88);
+    graphics.fillStyle(0x654630, 1).fillRect(x + 8, y + 14, 68, 24);
+    graphics.fillStyle(0xd9cfb4, 1).fillRect(x + 8, y + 38, 68, 1);
+    // Buckle.
+    graphics.fillStyle(0xe7c65b, 1).fillRect(x + 38, y + 20, 8, 8);
+    graphics.fillStyle(0x11181f, 1).fillRect(x + 40, y + 22, 4, 4);
+    // Zip, front pocket and school crest.
+    graphics.fillStyle(0xd9cfb4, 1).fillRect(x + 10, y + 46, 64, 1);
+    graphics.fillStyle(0x654630, 1).fillRect(x + 18, y + 52, 48, 34);
+    graphics.fillStyle(0x8a6242, 1).fillRect(x + 18, y + 52, 48, 2);
+    graphics.fillStyle(0x4a76b8, 1).fillRect(x + 24, y + 60, 10, 10);
+    graphics.fillStyle(0xe7c65b, 1).fillRect(x + 27, y + 63, 4, 4);
+    // Side pockets.
+    graphics.fillStyle(0x654630, 1).fillRect(x + 4, y + 56, 5, 22);
+    graphics.fillStyle(0x654630, 1).fillRect(x + 75, y + 56, 5, 22);
+    graphics.fillStyle(0xd9cfb4, 0.8);
+    for (let dot = 0; dot < 8; dot += 1) graphics.fillRect(x + 12 + dot * 8, y + 96, 3, 1);
+    this.#text('YOUR BAG', x + 42, y + 106, '#a9c4a0', { width: 84, align: 'center' });
+  }
+
+  #drawBagTabs(pages: number, page: number): void {
+    const graphics = this.#overlayGfx;
+    if (!graphics) return;
+    for (let index = 0; index < pages; index += 1) {
+      const x = 126 + index * 20;
+      const active = index === page;
+      graphics.fillStyle(active ? 0xe7c65b : 0x5f686f, 1).fillRect(x, 46, 16, 7);
+      graphics.fillStyle(0x11181f, 1).fillRect(x, 46, 16, 1);
+      this.#addHotspot(x, 44, 16, 10, () => {
+        this.#invIndex = Math.min(Math.max(0, this.#inventory.length - 1), index * BAG_SLOTS);
         this.#renderInventory();
       });
     }
+  }
 
-    const selected = this.#inventory[this.#invIndex];
-    if (selected) {
-      this.#text(selected.specialText, 38, 186, '#a9c4a0', { width: 400, maxLines: 2 });
+  #drawBagGrid(pageStart: number): void {
+    const graphics = this.#overlayGfx;
+    if (!graphics) return;
+    for (let slot = 0; slot < BAG_SLOTS; slot += 1) {
+      const index = pageStart + slot;
+      const item = this.#inventory[index];
+      const rect = bagSlotRect(slot, 126, 58, 34, 6);
+      const selected = index === this.#invIndex && Boolean(item);
+      const top = rect.y - (selected ? 2 : 0);
+      graphics.fillStyle(0x11181f, 0.55).fillRect(rect.x + 2, top + 3, rect.w, rect.h);
+      graphics.fillStyle(0xf3ecd8, 1).fillRect(rect.x, top, rect.w, rect.h);
+      graphics.fillStyle(0xd9cfb4, 1).fillRect(rect.x, top + rect.h - 2, rect.w, 2);
+      graphics.lineStyle(selected ? 2 : 1, selected ? 0xe7c65b : 0x1a2430, 1);
+      graphics.strokeRect(rect.x + 0.5, top + 0.5, rect.w - 1, rect.h - 1);
+      if (item) {
+        this.#icon(item, rect.x + rect.w / 2, top + rect.h / 2 - 2);
+        if (item === this.#weapon || item === this.#armor) {
+          graphics.fillStyle(0x6fae5f, 1).fillRect(rect.x + rect.w - 8, top + 3, 5, 5);
+        }
+        this.#addHotspot(rect.x, top, rect.w, rect.h, () => {
+          this.#invIndex = index;
+          this.#renderInventory();
+        });
+      } else {
+        graphics.fillStyle(0x8c949a, 0.45);
+        graphics.fillRect(rect.x + 13, top + 16, 8, 1);
+        graphics.fillRect(rect.x + 16, top + 13, 1, 8);
+      }
     }
-    this.#text(
-      `${keyName(this.#binds.up)}/${keyName(this.#binds.down)} SELECT   ENTER EQUIP   ${keyName(this.#binds.pause)} CLOSE`,
-      38,
-      230,
-      '#5f686f',
-      { width: 400 },
-    );
+  }
+
+  #drawBagCard(item: ItemDef | null): void {
+    const graphics = this.#overlayGfx;
+    if (!graphics) return;
+    const x = 252;
+    const y = 58;
+    const w = 196;
+    const h = 118;
+    graphics.fillStyle(0x11181f, 0.5).fillRect(x + 2, y + 3, w, h);
+    graphics.fillStyle(0xf3ecd8, 1).fillRect(x, y, w, h);
+    // Ruled exercise-book paper with a red margin.
+    for (let line = y + 15; line < y + h - 6; line += 11) {
+      graphics.fillStyle(0xd9cfb4, 1).fillRect(x + 14, line, w - 22, 1);
+    }
+    graphics.fillStyle(0xc8453f, 1).fillRect(x + 12, y, 1, h);
+
+    if (!item) {
+      this.#text('NOTHING SELECTED', x + 22, y + 20, '#5f686f', { width: w - 34 });
+      this.#text('DESKS AND LOCKERS FILL THIS BAG AS YOU CLEAR FLOORS.', x + 22, y + 38, '#5f686f', {
+        width: w - 34,
+        maxLines: 3,
+      });
+      return;
+    }
+
+    this.#text(item.name.toUpperCase(), x + 20, y + 8, '#1a2430', { width: w - 34, maxLines: 2 });
+    const worn = item === this.#weapon ? 'WIELDING' : item === this.#armor ? 'WEARING' : '';
+    if (worn) {
+      graphics.fillStyle(0xe7c65b, 1).fillRect(x + w - 64, y + 5, 58, 11);
+      this.#text(worn, x + w - 35, y + 7, '#1a2430', { width: 54, align: 'center' });
+    }
+    const kind = item.kind === 'weapon' ? 'SUPPLY' : 'UNIFORM';
+    this.#text(`${kind}   TIER ${item.tier}`, x + 20, y + 34, '#417a45', { width: w - 34 });
+    const stats =
+      item.kind === 'weapon'
+        ? `${item.damage} DAMAGE   ${item.speed.toFixed(1)} SPEED`
+        : `ARMOR ${item.armorValue ?? 0}   WEIGHT ${item.weight}`;
+    this.#text(stats, x + 20, y + 46, '#233040', { width: w - 34 });
+    this.#text(item.specialText, x + 20, y + 64, '#2f4055', { width: w - 34, maxLines: 4 });
   }
 
   #equipSelected(): void {
@@ -2160,16 +2326,9 @@ export class RunScene extends Phaser.Scene {
           if (cancel) this.#closeOverlay();
           return;
         }
-        let moved = false;
-        if (this.#navJust('up')) {
-          this.#invIndex = (this.#invIndex + count - 1) % count;
-          moved = true;
-        }
-        if (this.#navJust('down')) {
-          this.#invIndex = (this.#invIndex + 1) % count;
-          moved = true;
-        }
-        if (moved) {
+        const direction = this.#bagDirectionPressed();
+        if (direction) {
+          this.#invIndex = moveBagSelection(this.#invIndex, direction, count);
           this.#renderInventory();
           return;
         }

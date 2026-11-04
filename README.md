@@ -68,7 +68,7 @@ npm run dev     # browser playtest at http://localhost:5173
 | Block / parry | Left mouse button (hold) | Tap on impact to parry: no damage, the attacker is stunned |
 | Dodge roll | Space | Short burst of invulnerability |
 | Open desk / locker / stairs | E | Glowing lockers and desks are within reach when prompted |
-| Inventory | I | Equip weapons and armour, read item specials |
+| Inventory | I | The school bag: 3x3 pockets, page with left/right, ENTER to equip |
 | Skill tree | K (from the pause menu) | Spend Smarts on your class's six nodes |
 | Pause / menu | Escape | Resume, inventory and controls |
 
@@ -168,6 +168,23 @@ open one, read what you found, then optionally take a bonus question: a correct
 answer upgrades the most valuable item in that haul by one tier (damage, speed,
 crit chance and durability all rise). A wrong answer costs nothing but the
 upgrade.
+
+## The school bag
+
+Inventory is a backpack, not a list. Press **I** and the hall turns into a
+chalkboard with a chalk drawing of your bag, a page of nine pockets and the
+selected item on a sheet of ruled exercise-book paper: supply or uniform, tier,
+damage and speed or armour and weight, the special, and a yellow WIELDING or
+WEARING ribbon when it is already equipped. A green corner dot marks equipped
+gear, empty pockets are chalked crosses, and the page tabs at the top switch
+pages. Move with WASD or the arrow keys — left and right walk off the end of a
+page onto the next one — press ENTER to equip, and the bag keeps everything
+across floors and save slots.
+
+Every other overlay uses the same classroom furniture: the pause menu, the loot
+drawer, the bonus questions, the locker room and the skill sheet are all chalk
+on a wooden-framed board, with the selected row marked by a chalk wash and a
+yellow tick instead of a dark bar.
 
 ## Play in a browser (GitHub Pages)
 
