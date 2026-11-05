@@ -18,7 +18,7 @@ import { playerAnimKey, playerTextureKey } from '../art/classSprites';
 import { PixelLabel } from '../art/text';
 import { createRng, weightedPick, type Rng } from '../core/rng';
 import type { DifficultyDef, EnemyDef, ItemDef, PerkEffects, SkillDef, Subject } from '../content/types';
-import { buildFloor, roomAt, TILE_FLOOR, TILE_WALL, type ChestSpot, type FloorPlan } from '../world/dungeon';
+import { buildFloor, openGate, roomAt, TILE_FLOOR, TILE_WALL, type ChestSpot, type FloorPlan } from '../world/dungeon';
 import {
   aggregateEffectList,
   attackSpeedOf,
@@ -64,6 +64,13 @@ import {
 import { clearSlot, makeSave, writeSlot } from '../systems/save';
 import { nearestFreeSpot, overlapsWall } from '../systems/collision';
 import {
+  sigilHeadline,
+  sigilPattern,
+  sigilPrompt,
+  sigilRetryHint,
+  sigilRng,
+} from '../systems/sigils';
+import {
   BAG_SLOTS,
   bagPageCount,
   bagPageOf,
@@ -91,6 +98,7 @@ interface EnemyActor {
   def: EnemyDef;
   sprite: Phaser.Physics.Arcade.Sprite;
   shadow: Phaser.GameObjects.Image;
+  halo: Phaser.GameObjects.Image | null;
   bar: Phaser.GameObjects.Graphics;
   hp: number;
   maxHp: number;
@@ -123,6 +131,16 @@ interface PendingLoot {
   furniture: 'desk' | 'locker';
 }
 
+interface GateActor {
+  image: Phaser.GameObjects.Image;
+  glow: Phaser.GameObjects.Image;
+  blocker: Phaser.GameObjects.Zone;
+  index: number;
+  opened: boolean;
+  /** The gate keeps its question, so a retry is the same rune, not a reroll. */
+  presented: PresentedQuestion | null;
+}
+
 interface Hotspot {
   x: number;
   y: number;
@@ -141,7 +159,9 @@ type OverlayKind =
   | 'skills'
   | 'locker'
   | 'locker-question'
-  | 'locker-result';
+  | 'locker-result'
+  | 'sigil-question'
+  | 'sigil-result';
 
 const TILE = BALANCE.world.tileSize;
 const VIEW_W = BALANCE.world.viewWidth;
@@ -181,7 +201,7 @@ export class RunScene extends Phaser.Scene {
   #player!: Phaser.Physics.Arcade.Sprite;
   #playerShadow!: Phaser.GameObjects.Image;
   #wallZones: Phaser.GameObjects.GameObject[] = [];
-  #gates: { image: Phaser.GameObjects.Image; index: number; opened: boolean }[] = [];
+  #gates: GateActor[] = [];
   #stairs!: Phaser.GameObjects.Image;
   #enemies: EnemyActor[] = [];
   #pickups: PickupActor[] = [];
@@ -244,6 +264,10 @@ export class RunScene extends Phaser.Scene {
   #lockerIndex = 0;
   #lockerTarget: ItemDef | null = null;
 
+  #sigilGate: GateActor | null = null;
+  #sigilSolved = false;
+  #sigilHinted = new Set<number>();
+
   #hpBar!: Phaser.GameObjects.Graphics;
   #hpLabel!: PixelLabel;
   #inkBar!: Phaser.GameObjects.Graphics;
@@ -252,6 +276,7 @@ export class RunScene extends Phaser.Scene {
   #statusLabel!: PixelLabel;
   #toastLabel!: PixelLabel;
   #floorLabel!: PixelLabel;
+  #gatePrompt!: PixelLabel;
 
   constructor() {
     super('Run');
@@ -312,6 +337,9 @@ export class RunScene extends Phaser.Scene {
     this.#lockerAttempts = 0;
     this.#lockerIndex = 0;
     this.#lockerTarget = null;
+    this.#sigilGate = null;
+    this.#sigilSolved = false;
+    this.#sigilHinted = new Set<number>();
   }
 
   create(): void {
@@ -381,7 +409,14 @@ export class RunScene extends Phaser.Scene {
         const worldX = x * TILE;
         const worldY = y * TILE;
         if (tile === TILE_WALL) {
-          baked.draw(`tile-${themeId}-wall`, worldX, worldY);
+          // Walls facing a floor get the face texture; everything behind them is
+          // ceiling, which is what separates a corridor from a wall slab.
+          const below = y + 1 < plan.height ? (plan.tiles[(y + 1) * plan.width + x] ?? TILE_WALL) : TILE_WALL;
+          const key =
+            below === TILE_WALL
+              ? `tile-${themeId}-wall-top`
+              : `tile-${themeId}-wall-face-${(x * 5 + y * 3) % 4}`;
+          baked.draw(key, worldX, worldY);
         } else {
           const variant = (x * 7 + y * 13) % 4;
           baked.draw(`tile-${themeId}-floor-${variant}`, worldX, worldY);
@@ -397,8 +432,12 @@ export class RunScene extends Phaser.Scene {
         if (tile !== TILE_FLOOR) continue;
         const above = y > 0 ? plan.tiles[(y - 1) * plan.width + x] : TILE_WALL;
         const left = x > 0 ? plan.tiles[y * plan.width + x - 1] : TILE_WALL;
+        const right = x + 1 < plan.width ? plan.tiles[y * plan.width + x + 1] : TILE_WALL;
+        const below = y + 1 < plan.height ? plan.tiles[(y + 1) * plan.width + x] : TILE_WALL;
         if (above === TILE_WALL) baked.draw('ao-top', x * TILE, y * TILE);
         if (left === TILE_WALL) baked.draw('ao-left', x * TILE, y * TILE);
+        if (right === TILE_WALL) baked.draw('ao-right', x * TILE, y * TILE);
+        if (below === TILE_WALL) baked.draw('ao-bottom', x * TILE, y * TILE);
       }
     }
 
@@ -420,13 +459,58 @@ export class RunScene extends Phaser.Scene {
       }
     }
 
+    // Warm pools of light per room: the cheapest way to stop a tiled floor from
+    // reading as graph paper. They sit above the baked floor and under props.
+    for (const room of plan.rooms) {
+      const px = room.cx * TILE + TILE / 2;
+      const py = room.cy * TILE + TILE / 2;
+      const pool = this.add
+        .image(px, py, 'lightpool')
+        .setDepth(2)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setAlpha(0.16 + this.#ambientRng.range(0, 8) / 100)
+        .setScale(2.4 + room.w * 0.08);
+      this.tweens.add({
+        targets: pool,
+        alpha: { from: 0.1, to: 0.26 },
+        duration: 2200 + this.#ambientRng.range(0, 1400),
+        yoyo: true,
+        repeat: -1,
+      });
+    }
+
     this.#stairs = this.add
       .image(plan.stairs.x * TILE + TILE / 2, plan.stairs.y * TILE + TILE / 2, 'stairs')
       .setDepth(3);
+    this.add
+      .image(this.#stairs.x, this.#stairs.y, 'glow')
+      .setDepth(2)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(0.5)
+      .setScale(1.4);
 
     for (const gate of plan.gates) {
-      const image = this.add.image(gate.x * TILE + TILE / 2, gate.y * TILE + TILE / 2, 'gate').setDepth(4);
-      this.#gates.push({ image, index: gate.index, opened: gate.opened });
+      const x = gate.x * TILE + TILE / 2;
+      const y = gate.y * TILE + TILE / 2;
+      // A sigil door is a real blocker: the rune is lit and the doorway is solid,
+      // so no player walks into an invisible wall or past an unopened lock.
+      const glow = this.add
+        .image(x, y, 'glow')
+        .setDepth(3)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setAlpha(0.5)
+        .setScale(1.5);
+      const image = this.add.image(x, y, 'gate').setDepth(4);
+      const blocker = this.add.zone(x, y, TILE - 2, TILE - 2);
+      this.physics.add.existing(blocker, true);
+      this.tweens.add({
+        targets: glow,
+        alpha: { from: 0.25, to: 0.7 },
+        duration: 1400 + gate.index * 180,
+        yoyo: true,
+        repeat: -1,
+      });
+      this.#gates.push({ image, glow, blocker, index: gate.index, opened: gate.opened, presented: null });
     }
 
     // Merge solid tiles into horizontal runs so physics stays cheap.
@@ -481,6 +565,9 @@ export class RunScene extends Phaser.Scene {
     this.#player.setOffset(3, 7);
     this.#player.setCollideWorldBounds(true);
     this.physics.add.collider(this.#player, this.#wallZones);
+    for (const gate of this.#gates) {
+      if (!gate.opened) this.physics.add.collider(this.#player, gate.blocker);
+    }
     // The wall guard snaps back here if a dodge or knockback is ever resolved
     // into geometry, so the player never ends up stuck inside a wall.
     this.#safeX = this.#player.x;
@@ -492,6 +579,14 @@ export class RunScene extends Phaser.Scene {
       const image = projectile as Phaser.Physics.Arcade.Image;
       if (image.active) image.destroy();
     });
+    const closedGates = this.#gates.filter((gate) => !gate.opened).map((gate) => gate.blocker);
+    if (closedGates.length > 0) {
+      // A shot into a shut door stops at the door, exactly like a wall.
+      this.physics.add.collider(this.#projectiles, closedGates, (projectile) => {
+        const image = projectile as Phaser.Physics.Arcade.Image;
+        if (image.active) image.destroy();
+      });
+    }
     this.physics.add.overlap(this.#player, this.#projectiles, (_player, projectile) => {
       this.#projectileHit(projectile as Phaser.GameObjects.GameObject);
     });
@@ -533,11 +628,32 @@ export class RunScene extends Phaser.Scene {
     sprite.setCollideWorldBounds(true);
     if (def.role === 'boss') sprite.setScale(1.8);
     this.physics.add.collider(sprite, this.#wallZones);
+    for (const gate of this.#gates) {
+      if (!gate.opened) this.physics.add.collider(sprite, gate.blocker);
+    }
+    // Elites and bosses stand in their own light, so the threat reads first.
+    let halo: Phaser.GameObjects.Image | null = null;
+    if (elite || def.role === 'boss') {
+      halo = this.add
+        .image(x, y + 5, 'glow')
+        .setDepth(Math.round(y) - 2)
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setAlpha(0.4)
+        .setScale(def.role === 'boss' ? 2.8 : 1.5);
+      this.tweens.add({
+        targets: halo,
+        alpha: { from: 0.22, to: 0.55 },
+        duration: def.role === 'boss' ? 1500 : 1000,
+        yoyo: true,
+        repeat: -1,
+      });
+    }
 
     const actor: EnemyActor = {
       def,
       sprite,
       shadow,
+      halo,
       bar: this.add.graphics().setDepth(950),
       hp: stats.hp,
       maxHp: stats.hp,
@@ -648,6 +764,16 @@ export class RunScene extends Phaser.Scene {
     })
       .setScrollFactor(0)
       .setDepth(991);
+    this.#gatePrompt = new PixelLabel(this, VIEW_W / 2, VIEW_H - 26, {
+      text: '',
+      color: '#e7c65b',
+      width: 320,
+      maxLines: 1,
+      align: 'center',
+    })
+      .setScrollFactor(0)
+      .setDepth(991)
+      .setVisible(false);
     this.#toastLabel = new PixelLabel(this, VIEW_W / 2, 58, {
       text: '',
       color: '#e7c65b',
@@ -668,6 +794,7 @@ export class RunScene extends Phaser.Scene {
     this.#weaponLabel?.destroy();
     this.#statusLabel?.destroy();
     this.#floorLabel?.destroy();
+    this.#gatePrompt?.destroy();
     this.#toastLabel?.destroy();
   }
 
@@ -800,6 +927,7 @@ export class RunScene extends Phaser.Scene {
 
     const body = this.#player.body as Phaser.Physics.Arcade.Body;
     this.#keepOutOfWalls(time, body);
+    this.#updateGatePrompt();
 
     if (!this.#blocking && this.#justPressed('sprint') && time >= this.#sprintReadyAt && moving) {
       this.#sprintUntil = time + BALANCE.player.sprintDurationMs;
@@ -1395,6 +1523,190 @@ export class RunScene extends Phaser.Scene {
     this.#showToast('THE LOCKER ROOM GOES DARK. THE STAIRS ARE WAITING.', 2200);
   }
 
+  // -------------------------------------------------------------------------
+  // Sigil locks: the quiz doors that stand between the player and the stairs
+  // -------------------------------------------------------------------------
+
+  /** Shown over the HUD whenever a shut gate is within reading distance. */
+  #updateGatePrompt(): void {
+    const playerX = this.#player.x;
+    const playerY = this.#player.y;
+    let near: GateActor | null = null;
+    let nearest = Number.POSITIVE_INFINITY;
+    for (const gate of this.#gates) {
+      if (gate.opened) continue;
+      const distance = Math.hypot(gate.image.x - playerX, gate.image.y - playerY);
+      if (distance < 30 && distance < nearest) {
+        near = gate;
+        nearest = distance;
+      }
+    }
+    if (!near) {
+      this.#gatePrompt.setVisible(false);
+      return;
+    }
+    this.#gatePrompt.setText(sigilPrompt(false, keyName(this.#binds.interact))).setVisible(true);
+    if (!this.#sigilHinted.has(near.index)) {
+      this.#sigilHinted.add(near.index);
+      this.#showToast('A QUIZ SIGIL LOCK. READ THE RUNE TO OPEN THE DOOR.', 2600);
+    }
+  }
+
+  #openSigilQuiz(gate: GateActor): void {
+    if (gate.opened) return;
+    const presented = gate.presented ?? this.#rollSigilQuestion(gate.index);
+    gate.presented = presented;
+    this.#sigilGate = gate;
+    this.#sigilSolved = false;
+    this.#presented = presented;
+    this.#openOverlay('sigil-question');
+    this.#renderSigilQuestion(gate, presented);
+  }
+
+  /** Deterministic per floor and gate: the same door always asks the same rune. */
+  #rollSigilQuestion(index: number): PresentedQuestion {
+    const rng = sigilRng(this.#seed, this.#floor, index);
+    return presentQuestion(rng, pickBonusQuestion(rng, QUESTIONS, this.#themeSubject()));
+  }
+
+  #renderSigilQuestion(gate: GateActor, presented: PresentedQuestion): void {
+    this.#overlay = 'sigil-question';
+    this.#resetOverlayContent();
+    this.#panel(24, 16, 432, 236);
+    this.#text('SIGIL LOCK', 38, 24, '#e7c65b', { width: 200 });
+    this.#text(`${presented.subject.replace('_', ' ').toUpperCase()} RUNE`, VIEW_W - 38, 24, '#a9c4a0', {
+      width: 200,
+      align: 'right',
+    });
+    this.#drawSigil(VIEW_W - 78, 62, gate.index);
+    this.#text(presented.prompt, 38, 44, '#eef3e6', { width: 300, maxLines: 4 });
+    presented.choices.forEach((choice, choiceIndex) => {
+      const y = 110 + choiceIndex * 22;
+      this.#text(`${choiceIndex + 1}. ${choice}`, 42, y, '#cfe3c0', { width: 330 });
+      this.#addHotspot(36, y - 4, 344, 19, () => this.#answerSigil(choiceIndex));
+    });
+    this.#text('A WRONG ANSWER COSTS NOTHING. THE DOOR WAITS.', VIEW_W / 2, 206, '#a9c4a0', {
+      width: 400,
+      align: 'center',
+    });
+    this.#text(
+      `1-4 OR CLICK AN ANSWER    ${keyName(this.#binds.pause)} STEP AWAY`,
+      VIEW_W / 2,
+      222,
+      '#cfe3c0',
+      { width: 400, align: 'center' },
+    );
+  }
+
+  /** The chalk rune on the board, drawn from the gate's own deterministic pattern. */
+  #drawSigil(cx: number, cy: number, gateIndex: number): void {
+    const graphics = this.#overlayGfx;
+    if (!graphics) return;
+    const pattern = sigilPattern(this.#seed, this.#floor, gateIndex, 24);
+    graphics.lineStyle(2, 0xcfe3c0, 0.9);
+    graphics.strokeCircle(cx, cy, pattern.radius);
+    graphics.lineStyle(1, 0xe7c65b, 0.85);
+    graphics.strokeCircle(cx, cy, Math.max(4, pattern.radius - 6));
+    for (let spoke = 0; spoke < pattern.spokes; spoke += 1) {
+      const angle = pattern.rotation + (spoke / pattern.spokes) * Math.PI * 2;
+      graphics.beginPath();
+      graphics.moveTo(cx + Math.cos(angle) * 4, cy + Math.sin(angle) * 4);
+      graphics.lineTo(
+        cx + Math.cos(angle) * (pattern.radius - 3),
+        cy + Math.sin(angle) * (pattern.radius - 3),
+      );
+      graphics.strokePath();
+    }
+    if (pattern.triangle) {
+      graphics.beginPath();
+      for (let corner = 0; corner < 3; corner += 1) {
+        const angle = pattern.rotation - Math.PI / 2 + (corner / 3) * Math.PI * 2;
+        const x = cx + Math.cos(angle) * (pattern.radius - 9);
+        const y = cy + Math.sin(angle) * (pattern.radius - 9);
+        if (corner === 0) graphics.moveTo(x, y);
+        else graphics.lineTo(x, y);
+      }
+      graphics.closePath();
+      graphics.strokePath();
+    }
+    for (let mark = 0; mark < pattern.marks; mark += 1) {
+      const angle = pattern.rotation + (mark / Math.max(1, pattern.marks)) * Math.PI * 2 + Math.PI / 7;
+      graphics.fillStyle(0xe7c65b, 0.9);
+      graphics.fillRect(
+        Math.round(cx + Math.cos(angle) * (pattern.radius + 3)) - 1,
+        Math.round(cy + Math.sin(angle) * (pattern.radius + 3)) - 1,
+        2,
+        2,
+      );
+    }
+  }
+
+  #answerSigil(choice: number): void {
+    const gate = this.#sigilGate;
+    const presented = this.#presented;
+    if (!gate || !presented || gate.opened) return;
+    const correct = choice === presented.answerIndex;
+    if (correct) this.#openSigilGate(gate);
+    this.#sigilSolved = correct;
+    this.#overlay = 'sigil-result';
+    this.#resetOverlayContent();
+    this.#panel(40, 40, 400, 190);
+    this.#text(sigilHeadline(correct), VIEW_W / 2, 50, correct ? '#a9c4a0' : '#c8453f', {
+      width: 360,
+      align: 'center',
+    });
+    this.#text(
+      correct
+        ? 'THE DOOR SWINGS INWARD. THE HALLWAY BEYOND IS YOURS.'
+        : `THE ANSWER WAS: ${presented.choices[presented.answerIndex] ?? ''}`,
+      VIEW_W / 2,
+      72,
+      '#eef3e6',
+      { width: 350, maxLines: 2, align: 'center' },
+    );
+    this.#text(presented.explanation, VIEW_W / 2, 114, '#b9c0c4', {
+      width: 350,
+      maxLines: 3,
+      align: 'center',
+    });
+    this.#text(sigilRetryHint(correct), VIEW_W / 2, 196, '#cfe3c0', { width: 350, align: 'center' });
+    this.#addHotspot(40, 40, 400, 190, () => this.#leaveSigilResult());
+    this.#refreshHud();
+  }
+
+  /** Opening the gate flips the tile to floor, so physics and the wall guard agree. */
+  #openSigilGate(gate: GateActor): void {
+    if (gate.opened) return;
+    gate.opened = true;
+    openGate(this.#plan, gate.index);
+    this.physics.world.disable(gate.blocker);
+    gate.blocker.destroy();
+    gate.image.setTexture('gate-open');
+    // The doorway stays on screen with its leaves swung aside, and the tile below
+    // is floor now, so the player walks between the doors instead of through them.
+    this.tweens.add({
+      targets: gate.glow,
+      alpha: 0,
+      duration: 500,
+      ease: 'Quad.easeOut',
+      onComplete: () => gate.glow.destroy(),
+    });
+    this.#spawnSparks(gate.image.x, gate.image.y, 16);
+    this.#gatePrompt.setVisible(false);
+    this.#showToast('THE SIGIL BURNS. THE DOOR IS OPEN.', 2200);
+  }
+
+  #leaveSigilResult(): void {
+    const gate = this.#sigilGate;
+    const presented = this.#presented;
+    if (this.#sigilSolved || !gate || gate.opened || !presented) {
+      this.#closeOverlay();
+      return;
+    }
+    // Wrong answer: the same rune comes back, with no cost and no lockout.
+    this.#renderSigilQuestion(gate, presented);
+  }
+
   #cameras(): Phaser.Cameras.Scene2D.Camera {
     return this.cameras.main;
   }
@@ -1417,6 +1729,8 @@ export class RunScene extends Phaser.Scene {
     enemy.hp = 0;
     enemy.bar.destroy();
     enemy.shadow.destroy();
+    enemy.halo?.destroy();
+    enemy.halo = null;
     const body = enemy.sprite.body as Phaser.Physics.Arcade.Body | null;
     if (body) body.enable = false;
     this.#smarts = Math.min(
@@ -1641,11 +1955,11 @@ export class RunScene extends Phaser.Scene {
     const gate = this.#gates.find(
       (candidate) =>
         !candidate.opened &&
-        Math.abs(candidate.image.x - playerX) < 22 &&
-        Math.abs(candidate.image.y - playerY) < 22,
+        Math.abs(candidate.image.x - playerX) < 24 &&
+        Math.abs(candidate.image.y - playerY) < 24,
     );
     if (gate) {
-      this.#showToast('LOCKED - THE QUIZ SIGIL IS DARK. FIND ANOTHER WAY.', 2400);
+      this.#openSigilQuiz(gate);
       return;
     }
 
@@ -2032,6 +2346,8 @@ export class RunScene extends Phaser.Scene {
     this.#overlay = 'none';
     this.#pendingLoot = null;
     this.#presented = null;
+    this.#sigilGate = null;
+    this.#sigilSolved = false;
     if (!this.#dead) this.physics.resume();
     this.#refreshHud();
   }
@@ -2397,6 +2713,19 @@ export class RunScene extends Phaser.Scene {
       }
       case 'locker-result': {
         if (confirm || cancel) this.#leaveLockerResult();
+        break;
+      }
+      case 'sigil-question': {
+        if (cancel) {
+          this.#closeOverlay();
+          return;
+        }
+        const digit = this.#digitPressed();
+        if (digit !== null) this.#answerSigil(digit);
+        break;
+      }
+      case 'sigil-result': {
+        if (confirm || cancel) this.#leaveSigilResult();
         break;
       }
       case 'skills': {

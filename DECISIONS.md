@@ -30,8 +30,9 @@ Short judgement calls made while building, with one line of rationale each.
     mostly produces noise in tight grid loops and is handled by explicit guards.
 14. **Content validator throws at import** — a bad reference must fail loudly at
     boot, not surface as `undefined` three floors later.
-15. **Quiz lock currently reports "quiz sigil is dark"** — quiz interaction is M5;
-    the door is genuinely locked and clearly labelled rather than faked open.
+15. **Quiz lock was originally a labelled dead end** — during the movement
+    milestone the door was genuinely locked with no way to answer it; entry 50
+    replaces that placeholder with the rune quiz.
 16. **Bitmap labels anchor by alignment (left 0, centre 0.5, right 1)** — a
     label's x is its alignment edge; anchoring everything at the left put
     centred title/toast text past the right edge of the 480×270 viewport.
@@ -184,3 +185,17 @@ Short judgement calls made while building, with one line of rationale each.
     chalkboard with light chalk text, which is why every hint line in the
     overlays moved from grey to chalk colours; dark selection bars were replaced
     by a chalk wash plus a yellow tick so they stay readable on green.
+50. **Sigil doors are real blockers with a retryable quiz** — the gate tile used
+    to be unopenable while the wall guard treated it as solid, so a gate on the
+    spawn→stairs path could wall the run in with no way to answer it. Gates now
+    carry a static blocker, a lit chalk rune and a read-the-sigil prompt, and
+    answering the rune opens the tile. A wrong answer costs nothing, so no gate
+    can soft-lock a floor, and the question is forked from the run seed plus the
+    gate index so a saved floor always asks the same thing.
+51. **The graphics pass works inside the existing art rules** — walls render as
+    face (wainscot, baseboard, one of four details) when a floor is below them and
+    as dark ceiling otherwise, floors follow the room's material, and contact
+    shadows fall on all four sides. Rooms get a slow warm light pool, stairs glow
+    from the well and elites/bosses stand in a halo. All of it is texture choice
+    and additive light from the same 32 colours, so no new palette entries,
+    assets, shaders or blend modes were introduced.

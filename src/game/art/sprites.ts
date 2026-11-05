@@ -312,21 +312,91 @@ function themeColor(themeId: string, field: 'floorColor' | 'wallColor' | 'accent
   return paletteHex(theme?.[field] ?? 'grey700');
 }
 
-function drawFloorTile(ctx: CanvasRenderingContext2D, base: string, accent: string, variant: number): void {
+type FloorPattern = 'tile' | 'plank' | 'checker' | 'carpet' | 'concrete' | 'lab';
+
+/** Floors follow the room: the gym is boards, the cafeteria is checker, and so on. */
+function floorPattern(themeId: string): FloorPattern {
+  switch (themeId) {
+    case 'library':
+    case 'gym':
+      return 'plank';
+    case 'cafeteria':
+      return 'checker';
+    case 'records_office':
+    case 'principals_office':
+      return 'carpet';
+    case 'boiler_room':
+      return 'concrete';
+    case 'science_lab':
+      return 'lab';
+    default:
+      return 'tile';
+  }
+}
+
+function drawFloorTile(
+  ctx: CanvasRenderingContext2D,
+  base: string,
+  accent: string,
+  variant: number,
+  pattern: FloorPattern,
+): void {
   box(ctx, 0, 0, TILE, TILE, base);
 
-  // Two-by-two grout grid: reads as tile, not as a flat colour block.
-  box(ctx, 0, 0, TILE, 1, PALETTE.ink800);
-  box(ctx, 0, 0, 1, TILE, PALETTE.ink800);
-  box(ctx, 0, 8, TILE, 1, PALETTE.ink700);
-  box(ctx, 8, 0, 1, TILE, PALETTE.ink700);
-  box(ctx, 1, 1, 7, 1, rgba(PALETTE.bone, 0.08));
-  box(ctx, 1, 1, 1, 7, rgba(PALETTE.bone, 0.05));
+  switch (pattern) {
+    case 'plank':
+      // Boards run across the room, staggered so the seams never line up.
+      for (let row = 0; row < 4; row += 1) {
+        const y = row * 4;
+        box(ctx, 0, y, TILE, 1, rgba(PALETTE.ink900, 0.5));
+        box(ctx, 0, y + 1, TILE, 1, rgba(PALETTE.bone, 0.07));
+        box(ctx, (row * 7 + variant * 3) % TILE, y + 1, 1, 3, rgba(PALETTE.ink900, 0.45));
+      }
+      break;
+    case 'checker':
+      box(ctx, 0, 0, 8, 8, rgba(PALETTE.ink900, 0.16));
+      box(ctx, 8, 8, 8, 8, rgba(PALETTE.ink900, 0.16));
+      box(ctx, 0, 0, 8, 8, rgba(PALETTE.bone, 0.05));
+      box(ctx, 8, 8, 8, 8, rgba(PALETTE.bone, 0.05));
+      box(ctx, 0, 0, TILE, 1, rgba(PALETTE.ink900, 0.3));
+      box(ctx, 0, 0, 1, TILE, rgba(PALETTE.ink900, 0.3));
+      break;
+    case 'carpet':
+      for (let dot = 0; dot < 22; dot += 1) {
+        box(ctx, (dot * 7 + variant * 5) % TILE, (dot * 11 + variant * 3) % TILE, 1, 1, rgba(PALETTE.bone, 0.06));
+      }
+      box(ctx, 0, 0, TILE, 1, rgba(PALETTE.ink900, 0.22));
+      break;
+    case 'concrete':
+      box(ctx, 2, 3, 5, 1, rgba(PALETTE.ink900, 0.2));
+      box(ctx, 9, 11, 4, 1, rgba(PALETTE.ink900, 0.18));
+      box(ctx, 12, 5, 2, 2, rgba(PALETTE.ink900, 0.14));
+      box(ctx, 0, 0, TILE, 1, rgba(PALETTE.ink900, 0.35));
+      break;
+    case 'lab':
+      box(ctx, 0, 0, TILE, 1, PALETTE.ink800);
+      box(ctx, 0, 0, 1, TILE, PALETTE.ink800);
+      box(ctx, 1, 1, 6, 1, rgba(PALETTE.bone, 0.09));
+      box(ctx, 1, 1, 1, 6, rgba(PALETTE.bone, 0.06));
+      box(ctx, 9, 9, 5, 1, rgba(PALETTE.ink900, 0.18));
+      break;
+    case 'tile':
+    default:
+      // Two-by-two grout grid: reads as tile, not as a flat colour block.
+      box(ctx, 0, 0, TILE, 1, PALETTE.ink800);
+      box(ctx, 0, 0, 1, TILE, PALETTE.ink800);
+      box(ctx, 0, 8, TILE, 1, PALETTE.ink700);
+      box(ctx, 8, 0, 1, TILE, PALETTE.ink700);
+      box(ctx, 1, 1, 7, 1, rgba(PALETTE.bone, 0.08));
+      box(ctx, 1, 1, 1, 7, rgba(PALETTE.bone, 0.05));
+      break;
+  }
 
+  // Wear is what sells a floor as used: every variant gets its own mess.
   if (variant === 1) {
     // Hairline crack with a scuffed corner.
-    box(ctx, 11, 3, 1, 4, PALETTE.ink700);
-    box(ctx, 12, 7, 2, 1, PALETTE.ink700);
+    box(ctx, 11, 3, 1, 4, rgba(PALETTE.ink900, 0.45));
+    box(ctx, 12, 7, 2, 1, rgba(PALETTE.ink900, 0.4));
     box(ctx, 4, 12, 1, 1, accent);
     box(ctx, 5, 13, 1, 1, PALETTE.grey500);
   } else if (variant === 2) {
@@ -342,49 +412,122 @@ function drawFloorTile(ctx: CanvasRenderingContext2D, base: string, accent: stri
   }
 }
 
-function drawWallTile(ctx: CanvasRenderingContext2D, base: string, floor: string): void {
+function drawWallFace(
+  ctx: CanvasRenderingContext2D,
+  base: string,
+  floor: string,
+  accent: string,
+  variant: number,
+): void {
   box(ctx, 0, 0, TILE, TILE, PALETTE.ink900);
   // Top face: the wall is 3/4, so the upper band is lit differently.
   box(ctx, 0, 0, TILE, 3, rgba(PALETTE.ink900, 0.55));
   box(ctx, 0, 0, TILE, 1, rgba(PALETTE.bone, 0.12));
-  // Front face.
+  // Front face with a wainscot band along the bottom.
   box(ctx, 0, 3, TILE, 10, base);
-  box(ctx, 0, 4, TILE, 1, rgba(PALETTE.bone, 0.14));
-  // Panel seams.
-  box(ctx, 7, 3, 1, 10, rgba(PALETTE.ink900, 0.35));
-  box(ctx, 0, 9, TILE, 1, rgba(PALETTE.ink900, 0.18));
-  // Baseboard.
+  box(ctx, 0, 3, TILE, 1, rgba(PALETTE.bone, 0.16));
+  box(ctx, 0, 8, TILE, 5, rgba(PALETTE.ink900, 0.22));
+  box(ctx, 0, 8, TILE, 1, rgba(PALETTE.bone, 0.1));
+  box(ctx, 7, 3, 1, 10, rgba(PALETTE.ink900, 0.3));
+  // Baseboard and its shadow.
   box(ctx, 0, 13, TILE, 3, floor);
   box(ctx, 0, 13, TILE, 1, PALETTE.ink900);
   box(ctx, 0, 15, TILE, 1, rgba(PALETTE.ink900, 0.6));
-  // A couple of knocks so long walls do not repeat perfectly.
-  box(ctx, 3, 6, 1, 2, rgba(PALETTE.ink900, 0.25));
-  box(ctx, 11, 11, 2, 1, rgba(PALETTE.ink900, 0.22));
+
+  // One detail per variant, so long walls do not repeat perfectly.
+  if (variant === 0) {
+    // Pinned notice with a line of writing.
+    box(ctx, 4, 4, 8, 6, PALETTE.paperShade);
+    box(ctx, 4, 4, 8, 1, PALETTE.paper);
+    box(ctx, 5, 6, 6, 1, PALETTE.grey500);
+    box(ctx, 5, 8, 4, 1, PALETTE.grey500);
+    box(ctx, 7, 4, 2, 1, accent);
+  } else if (variant === 1) {
+    // Vent grille.
+    box(ctx, 3, 4, 6, 4, rgba(PALETTE.ink900, 0.5));
+    for (let slat = 0; slat < 3; slat += 1) box(ctx, 4, 5 + slat, 4, 1, PALETTE.grey500);
+  } else if (variant === 2) {
+    // Conduit running up the wall.
+    box(ctx, 12, 2, 2, 11, PALETTE.steel);
+    box(ctx, 12, 2, 1, 11, PALETTE.grey100);
+    box(ctx, 11, 6, 4, 1, PALETTE.ink800);
+  } else {
+    // Scuffs and a knocked corner.
+    box(ctx, 3, 6, 1, 2, rgba(PALETTE.ink900, 0.3));
+    box(ctx, 11, 11, 2, 1, rgba(PALETTE.ink900, 0.26));
+    box(ctx, 12, 4, 1, 1, rgba(PALETTE.ink900, 0.35));
+  }
 }
 
-function drawGate(ctx: CanvasRenderingContext2D): void {
+function drawWallTop(ctx: CanvasRenderingContext2D): void {
   box(ctx, 0, 0, TILE, TILE, PALETTE.ink900);
-  box(ctx, 1, 1, TILE - 2, TILE - 2, PALETTE.grey700);
-  box(ctx, 1, 1, TILE - 2, 1, PALETTE.grey500);
-  for (let x = 3; x < TILE - 1; x += 4) box(ctx, x, 1, 2, TILE - 2, PALETTE.steel);
-  // The quiz sigil: dark, with a faint ring, so "locked" is legible.
-  box(ctx, 4, 5, 8, 6, PALETTE.ink900);
-  box(ctx, 4, 5, 8, 1, PALETTE.redDark);
-  box(ctx, 6, 7, 4, 2, PALETTE.red);
-  box(ctx, 7, 8, 2, 1, PALETTE.yellow);
-  box(ctx, 2, 2, 1, 1, PALETTE.grey100);
+  // The ceiling above the play plane: beams and dust, no baseboard.
+  box(ctx, 0, 0, TILE, 2, PALETTE.ink800);
+  box(ctx, 0, 7, TILE, 1, rgba(PALETTE.grey700, 0.6));
+  box(ctx, 0, 13, TILE, 1, rgba(PALETTE.grey700, 0.45));
+  for (let x = 2; x < TILE; x += 5) box(ctx, x, 2, 1, 5, rgba(PALETTE.grey700, 0.35));
+  box(ctx, 4, 10, 1, 1, rgba(PALETTE.bone, 0.12));
+  box(ctx, 11, 4, 1, 1, rgba(PALETTE.bone, 0.1));
+}
+
+function drawGate(ctx: CanvasRenderingContext2D, open: boolean): void {
+  box(ctx, 0, 0, TILE, TILE, PALETTE.ink900);
+  if (open) {
+    // Leaves swung aside, with a lit threshold between them.
+    box(ctx, 2, 1, 2, 14, PALETTE.steel);
+    box(ctx, 12, 1, 2, 14, PALETTE.steel);
+    box(ctx, 2, 1, 2, 1, PALETTE.grey100);
+    box(ctx, 12, 1, 2, 1, PALETTE.grey100);
+    box(ctx, 4, 4, 8, 8, PALETTE.ink800);
+    box(ctx, 5, 5, 6, 6, PALETTE.chalkLight);
+    box(ctx, 6, 6, 4, 4, PALETTE.bone);
+    box(ctx, 4, 1, 8, 2, PALETTE.grey700);
+    box(ctx, 4, 13, 8, 2, PALETTE.grey700);
+    return;
+  }
+  // Two steel leaves in a heavy frame.
+  box(ctx, 1, 0, 14, 16, PALETTE.grey700);
+  box(ctx, 2, 1, 5, 14, PALETTE.steel);
+  box(ctx, 9, 1, 5, 14, PALETTE.steel);
+  box(ctx, 2, 1, 5, 1, PALETTE.grey100);
+  box(ctx, 9, 1, 5, 1, PALETTE.grey100);
+  box(ctx, 7, 1, 1, 14, PALETTE.ink900);
+  for (let rivet = 0; rivet < 4; rivet += 1) {
+    box(ctx, 3, 3 + rivet * 3, 1, 1, PALETTE.ink700);
+    box(ctx, 12, 3 + rivet * 3, 1, 1, PALETTE.ink700);
+  }
+  // Hazard stripe across the base.
+  for (let stripe = 2; stripe < 14; stripe += 4) box(ctx, stripe, 12, 2, 2, PALETTE.yellow);
+  // The quiz sigil: a lit chalk ring with a rune inside, so a locked door reads
+  // as locked before the player walks into it.
+  box(ctx, 4, 4, 8, 6, rgba(PALETTE.ink900, 0.6));
+  ctx.strokeStyle = PALETTE.chalkLight;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(8, 7, 4, 0, Math.PI * 2);
+  ctx.stroke();
+  box(ctx, 7, 4, 2, 1, PALETTE.yellow);
+  box(ctx, 8, 5, 1, 3, PALETTE.chalkLight);
+  box(ctx, 6, 8, 4, 1, PALETTE.chalkLight);
+  // Handle.
+  box(ctx, 10, 6, 2, 3, PALETTE.ink900);
+  box(ctx, 10, 6, 1, 1, PALETTE.yellow);
 }
 
 function drawStairs(ctx: CanvasRenderingContext2D): void {
   box(ctx, 0, 0, TILE, TILE, PALETTE.ink900);
   box(ctx, 1, 1, 14, 14, PALETTE.grey700);
   box(ctx, 1, 1, 14, 1, PALETTE.grey500);
+  // Steps get darker as they descend, lit from the bottom of the well.
   for (let i = 0; i < 4; i += 1) {
-    box(ctx, 3, 3 + i * 3, 10 - i * 2, 2, PALETTE.ink800);
-    box(ctx, 3, 3 + i * 3, 10 - i * 2, 1, PALETTE.slate);
+    box(ctx, 2, 3 + i * 3, 12 - i, 2, PALETTE.ink800);
+    box(ctx, 2, 3 + i * 3, 12 - i, 1, PALETTE.slate);
   }
-  box(ctx, 7, 12, 2, 2, PALETTE.chalkLight);
-  box(ctx, 2, 2, 1, 1, PALETTE.bone);
+  box(ctx, 4, 12, 8, 2, PALETTE.yellow);
+  box(ctx, 5, 12, 6, 1, PALETTE.chalkLight);
+  // Handrails.
+  box(ctx, 2, 2, 1, 12, PALETTE.steel);
+  box(ctx, 13, 2, 1, 12, PALETTE.steel);
 }
 
 // ---------------------------------------------------------------------------
@@ -713,6 +856,31 @@ function drawAoLeft(ctx: CanvasRenderingContext2D): void {
   ctx.fillRect(0, 0, 6, 16);
 }
 
+function drawAoRight(ctx: CanvasRenderingContext2D): void {
+  const gradient = ctx.createLinearGradient(10, 0, 16, 0);
+  gradient.addColorStop(0, rgba(PALETTE.ink900, 0));
+  gradient.addColorStop(1, rgba(PALETTE.ink900, 0.4));
+  ctx.fillStyle = gradient;
+  ctx.fillRect(10, 0, 6, 16);
+}
+
+function drawAoBottom(ctx: CanvasRenderingContext2D): void {
+  const gradient = ctx.createLinearGradient(0, 10, 0, 16);
+  gradient.addColorStop(0, rgba(PALETTE.ink900, 0));
+  gradient.addColorStop(1, rgba(PALETTE.ink900, 0.4));
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 10, 16, 6);
+}
+
+function drawLightPool(ctx: CanvasRenderingContext2D): void {
+  const gradient = ctx.createRadialGradient(32, 32, 2, 32, 32, 32);
+  gradient.addColorStop(0, rgba(PALETTE.yellow, 0.3));
+  gradient.addColorStop(0.5, rgba(PALETTE.orange, 0.12));
+  gradient.addColorStop(1, rgba(PALETTE.ink900, 0));
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 64);
+}
+
 function drawVignette(ctx: CanvasRenderingContext2D, width: number, height: number): void {
   const gradient = ctx.createRadialGradient(
     width / 2,
@@ -738,15 +906,20 @@ export function generateArt(scene: Phaser.Scene, viewWidth = 480, viewHeight = 2
     const floor = themeColor(theme.id, 'floorColor');
     const accent = themeColor(theme.id, 'accentColor');
     const wall = themeColor(theme.id, 'wallColor');
+    const pattern = floorPattern(theme.id);
     for (let variant = 0; variant < 4; variant += 1) {
       makeCanvasTexture(scene, `tile-${theme.id}-floor-${variant}`, TILE, TILE, (ctx) =>
-        drawFloorTile(ctx, floor, accent, variant),
+        drawFloorTile(ctx, floor, accent, variant, pattern),
+      );
+      makeCanvasTexture(scene, `tile-${theme.id}-wall-face-${variant}`, TILE, TILE, (ctx) =>
+        drawWallFace(ctx, wall, floor, accent, variant),
       );
     }
-    makeCanvasTexture(scene, `tile-${theme.id}-wall`, TILE, TILE, (ctx) => drawWallTile(ctx, wall, floor));
+    makeCanvasTexture(scene, `tile-${theme.id}-wall-top`, TILE, TILE, drawWallTop);
   }
 
-  makeCanvasTexture(scene, 'gate', TILE, TILE, drawGate);
+  makeCanvasTexture(scene, 'gate', TILE, TILE, (ctx) => drawGate(ctx, false));
+  makeCanvasTexture(scene, 'gate-open', TILE, TILE, (ctx) => drawGate(ctx, true));
   makeCanvasTexture(scene, 'stairs', TILE, TILE, drawStairs);
   makeCanvasTexture(scene, 'dust', 3, 3, (ctx) => box(ctx, 0, 0, 3, 3, PALETTE.paperShade));
   makeCanvasTexture(scene, 'mote', 2, 2, (ctx) => box(ctx, 0, 0, 2, 2, PALETTE.chalkLight));
@@ -764,6 +937,9 @@ export function generateArt(scene: Phaser.Scene, viewWidth = 480, viewHeight = 2
   makeCanvasTexture(scene, 'shadow', 16, 6, drawShadow);
   makeCanvasTexture(scene, 'ao-top', 16, 6, drawAoTop);
   makeCanvasTexture(scene, 'ao-left', 6, 16, drawAoLeft);
+  makeCanvasTexture(scene, 'ao-right', 6, 16, drawAoRight);
+  makeCanvasTexture(scene, 'ao-bottom', 16, 6, drawAoBottom);
+  makeCanvasTexture(scene, 'lightpool', 64, 64, drawLightPool);
   makeCanvasTexture(scene, 'vignette', viewWidth, viewHeight, (ctx) => drawVignette(ctx, viewWidth, viewHeight));
 
   for (const furniture of ['desk', 'locker'] as const) {

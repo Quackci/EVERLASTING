@@ -68,6 +68,7 @@ npm run dev     # browser playtest at http://localhost:5173
 | Block / parry | Left mouse button (hold) | Tap on impact to parry: no damage, the attacker is stunned |
 | Dodge roll | Space | Short burst of invulnerability |
 | Open desk / locker / stairs | E | Glowing lockers and desks are within reach when prompted |
+| Read a sigil door | E | The HUD prompts you when a shut gate is within reach |
 | Inventory | I | The school bag: 3x3 pockets, page with left/right, ENTER to equip |
 | Skill tree | K (from the pause menu) | Spend Smarts on your class's six nodes |
 | Pause / menu | Escape | Resume, inventory and controls |
@@ -168,6 +169,28 @@ open one, read what you found, then optionally take a bonus question: a correct
 answer upgrades the most valuable item in that haul by one tier (damage, speed,
 crit chance and durability all rise). A wrong answer costs nothing but the
 upgrade.
+
+## Sigil doors
+
+Quiz locks are no longer a dead end. A shut gate is a steel double door with a
+lit chalk rune, standing across a corridor on the way to the stairs. Walk up to
+it and the HUD offers the interact key; press it and the gate's own rune appears
+on the board with a question from the floor's subjects. Answer it and the sigil
+burns, the door swings open and the corridor is yours. A wrong answer costs
+nothing at all — the same rune comes back, so a gate can never strand a run. The
+rune and its question are derived from the run seed, the floor and the gate's
+position, so a floor always asks the same thing.
+
+## The look
+
+Tiles are chosen from the map rather than painted uniformly: walls that face a
+floor draw their front (wainscot, baseboard, a pinned notice, vent or conduit)
+while walls with more wall beneath them are dark ceiling, floors follow the
+room's material (boards in the gym and library, checker in the cafeteria,
+carpet in the offices, concrete in the boiler room, lab tile in the science
+lab), and contact shadows fall on all four sides. Each room also holds a slow
+warm pool of light, stairs glow from the bottom of the well, and elites and
+bosses stand in their own halo so a dangerous room reads before its health bar.
 
 ## The school bag
 
