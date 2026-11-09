@@ -170,6 +170,17 @@ answer upgrades the most valuable item in that haul by one tier (damage, speed,
 crit chance and durability all rise). A wrong answer costs nothing but the
 upgrade.
 
+## Three backpacks
+
+Opening a desk, a locker or a boss's locker room no longer just hands you loot:
+three backpacks take over the screen and you pick one. Each pack sits inside a
+complete chalk ring whose colour is its rarity and whose lit ticks are the item
+tier, so the choice reads before anything is opened — one item in the plain pack,
+two in the rare one, or a cursed pack that might be worth the gamble. Contents are
+rolled from the run seed with the floor and your level, so deeper rooms and a
+stronger student both mean better gear. Your level is shown in the HUD and on the
+reward screen; it comes from depth plus the skill nodes you have learned.
+
 ## Sigil doors
 
 Quiz locks are no longer a dead end. A shut gate is a steel double door with a
@@ -191,6 +202,12 @@ carpet in the offices, concrete in the boiler room, lab tile in the science
 lab), and contact shadows fall on all four sides. Each room also holds a slow
 warm pool of light, stairs glow from the bottom of the well, and elites and
 bosses stand in their own halo so a dangerous room reads before its health bar.
+
+Students are drawn in nine tones — hair, a hair highlight, skin, eyes, collar,
+blazer, blazer shadow, trousers and shoes — and the walk cycle scissor-steps the
+legs while the arms counter-swing. Enemies gained a third tone on top of base and
+shadow, a rim light, and readable features: cap brims, glass vending screens,
+torn ghost hems and snouts. Dot eyes and heavy outlines are gone.
 
 ## The school bag
 

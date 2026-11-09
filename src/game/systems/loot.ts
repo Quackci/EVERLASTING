@@ -5,6 +5,7 @@
  */
 import type { Balance, ItemDef, QuestionDef, Rarity } from '../content/types';
 import { weightedPick, type Rng } from '../core/rng';
+import type { PaletteName } from '../art/palette';
 
 /** Rarity is a stat band: it decides which item tier the container can hold. */
 export const RARITY_TIER: Readonly<Record<Rarity, number>> = {
@@ -16,6 +17,15 @@ export const RARITY_TIER: Readonly<Record<Rarity, number>> = {
 };
 
 export const RARITY_ORDER: readonly Rarity[] = ['common', 'uncommon', 'rare', 'custom', 'cursed'];
+
+/** Palette accent per rarity, so a ring, its label and its tag share one colour. */
+export const RARITY_ACCENT: Readonly<Record<Rarity, PaletteName>> = {
+  common: 'grey100',
+  uncommon: 'chalk',
+  rare: 'blue',
+  custom: 'purple',
+  cursed: 'red',
+};
 
 export interface ChestLike {
   rarity: 'common' | 'rare' | 'locked';
@@ -219,4 +229,125 @@ export function upgradeTarget(items: readonly ItemDef[]): ItemDef | null {
     }
   }
   return best;
+}
+
+/** One backpack on the reward screen: a rarity ring, a tier and what is inside. */
+export interface RewardChoice {
+  rarity: Rarity;
+  tier: number;
+  smarts: number;
+  items: ItemDef[];
+}
+
+export interface RewardRollOptions {
+  luck?: number;
+  boss?: boolean;
+  count?: number;
+}
+
+function clampTier(value: number): number {
+  return Math.max(1, Math.min(5, value));
+}
+
+/**
+ * The student's run level. It is a readout of progress rather than a hidden
+ * stat: depth plus learned skill nodes, so the reward screen can honestly say
+ * the loot scaled with the player and not only with the room.
+ */
+export function runLevel(floor: number, learnedSkills: number, balance: Balance): number {
+  return (
+    1 +
+    Math.floor(Math.max(0, floor - 1) / balance.loot.levelPerFloors) +
+    Math.floor(Math.max(0, learnedSkills) / balance.loot.levelPerSkills)
+  );
+}
+
+/** Rarity band plus depth and level bonuses decide the item tier behind a ring. */
+export function tierForRoll(rarity: Rarity, floor: number, level: number, balance: Balance): number {
+  return clampTier(
+    RARITY_TIER[rarity] +
+      Math.floor(Math.max(0, floor - 1) / balance.loot.depthTierEvery) +
+      Math.floor(Math.max(0, level - 1) / balance.loot.levelTierEvery),
+  );
+}
+
+function pickChoiceItems(
+  rng: Rng,
+  tier: number,
+  items: readonly ItemDef[],
+  wanted: number,
+  requireWeapon: boolean,
+): ItemDef[] {
+  const pool = itemsForTier(tier, items);
+  const weapons = pool.filter((item) => item.kind === 'weapon');
+  const source = [...(weapons.length > 0 ? weapons : pool)];
+  const picked: ItemDef[] = [];
+  while (picked.length < wanted && source.length > 0) {
+    const [item] = source.splice(rng.int(source.length), 1);
+    if (item) picked.push(item);
+  }
+  if (picked.length < wanted) {
+    // A thin tier still owes a full pack, so top up from the rest of the bag.
+    const spare = items.filter((item) => !picked.includes(item));
+    while (picked.length < wanted && spare.length > 0) {
+      const [item] = spare.splice(rng.int(spare.length), 1);
+      if (item) picked.push(item);
+    }
+  }
+  if (requireWeapon && !picked.some((item) => item.kind === 'weapon')) {
+    const fallback = items.filter((item) => item.kind === 'weapon' && !picked.includes(item));
+    if (fallback.length > 0) {
+      const [weapon] = fallback.splice(rng.int(fallback.length), 1);
+      if (weapon) picked.unshift(weapon);
+    }
+  }
+  return picked;
+}
+
+/**
+ * Rolls the backpacks a container offers. Only when every roll lands on the same
+ * band does the last pack step up one band, so the three rings still read as a
+ * choice without turning every desk into a guaranteed rare. Contents scale with
+ * the floor and the run level, and a boss pack still always carries a weapon.
+ */
+export function rollRewardChoices(
+  rng: Rng,
+  floor: number,
+  level: number,
+  balance: Balance,
+  items: readonly ItemDef[],
+  options: RewardRollOptions = {},
+): RewardChoice[] {
+  const count = Math.max(1, Math.round(options.count ?? balance.loot.choiceCount));
+  const boss = options.boss === true;
+  const rarities: Rarity[] = [];
+  for (let index = 0; index < count; index += 1) {
+    rarities.push(rollRarity(rng, floor, balance, (options.luck ?? 0) + (boss ? 0.6 : 0)));
+  }
+  if (count > 1 && rarities.every((rarity) => rarity === rarities[0])) {
+    const start = RARITY_ORDER.indexOf(rarities[count - 1] ?? 'common');
+    const lifted = RARITY_ORDER[Math.min(3, Math.max(0, start + 1))];
+    if (lifted) rarities[count - 1] = lifted;
+  }
+
+  const bossFloorTier = boss ? bossLootTier(floor, balance) : 1;
+  const choices: RewardChoice[] = [];
+  rarities.forEach((rarity) => {
+    const tier = boss
+      ? clampTier(Math.max(tierForRoll(rarity, floor, level, balance), bossFloorTier - 1))
+      : tierForRoll(rarity, floor, level, balance);
+    const wanted = boss
+      ? rng.range(
+          balance.loot.boss.itemsMin,
+          Math.max(balance.loot.boss.itemsMin, balance.loot.boss.itemsMax),
+        )
+      : rarity === 'common'
+        ? 1
+        : rng.chance(0.5)
+          ? 2
+          : 1;
+    const smarts = boss ? 0 : rng.range(balance.smarts.chestMin, balance.smarts.chestMax);
+    choices.push({ rarity, tier, smarts, items: pickChoiceItems(rng, tier, items, wanted, boss) });
+  });
+  return choices;
 }

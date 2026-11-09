@@ -426,6 +426,16 @@ export interface Balance {
   };
   loot: {
     pityCommonsBeforeUncommon: number;
+    /** How many backpacks the reward screen offers to choose between. */
+    choiceCount: number;
+    /** Floors per tier of extra loot quality, on top of the rarity band. */
+    depthTierEvery: number;
+    /** Run levels per tier of extra loot quality. */
+    levelTierEvery: number;
+    /** Floors per run level. */
+    levelPerFloors: number;
+    /** Learned skill nodes per run level. */
+    levelPerSkills: number;
     rarityWeights: Record<string, Record<Rarity, number>>;
     boss: {
       itemsMin: number;

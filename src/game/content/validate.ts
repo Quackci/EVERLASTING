@@ -138,6 +138,16 @@ export function validateContent(content: ContentBundle): ValidationIssue[] {
   if (!Number.isInteger(balance.lockerRoom?.questions) || balance.lockerRoom.questions < 1) {
     push('balance.lockerRoom.questions', 'must be a positive whole number of questions');
   }
+  const choiceCount = balance.loot?.choiceCount;
+  if (!Number.isInteger(choiceCount) || choiceCount < 2) {
+    push('balance.loot.choiceCount', 'must offer at least two backpacks to choose between');
+  }
+  for (const field of ['depthTierEvery', 'levelTierEvery', 'levelPerFloors', 'levelPerSkills'] as const) {
+    const value = balance.loot?.[field];
+    if (!Number.isInteger(value) || value < 1) {
+      push(`balance.loot.${field}`, 'must be a positive whole number');
+    }
+  }
   const weightKeys = Object.keys(balance.loot?.rarityWeights ?? {});
   if (weightKeys.length < 4) {
     push('balance.loot.rarityWeights', 'expected weight tables for floors 1, 4, 7 and 10');

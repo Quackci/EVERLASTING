@@ -132,6 +132,11 @@
   },
   "loot": {
     "pityCommonsBeforeUncommon": 3,
+    "choiceCount": 3,
+    "depthTierEvery": 3,
+    "levelTierEvery": 3,
+    "levelPerFloors": 2,
+    "levelPerSkills": 2,
     "rarityWeights": {
       "floor1": { "common": 62, "uncommon": 27, "rare": 8, "custom": 0, "cursed": 3 },
       "floor4": { "common": 45, "uncommon": 32, "rare": 14, "custom": 4, "cursed": 5 },

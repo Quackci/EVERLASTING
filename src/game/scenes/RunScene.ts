@@ -14,10 +14,11 @@ import {
   SKILL_BY_ID,
 } from '../content';
 import { chestTextureKey, ensureItemIcon, ensurePropTexture, enemyTextureKey } from '../art/sprites';
+import { PALETTE, colorNumber } from '../art/palette';
 import { playerAnimKey, playerTextureKey } from '../art/classSprites';
 import { PixelLabel } from '../art/text';
 import { createRng, weightedPick, type Rng } from '../core/rng';
-import type { DifficultyDef, EnemyDef, ItemDef, PerkEffects, SkillDef, Subject } from '../content/types';
+import type { DifficultyDef, EnemyDef, ItemDef, PerkEffects, Rarity, SkillDef, Subject } from '../content/types';
 import { buildFloor, openGate, roomAt, TILE_FLOOR, TILE_WALL, type ChestSpot, type FloorPlan } from '../world/dungeon';
 import {
   aggregateEffectList,
@@ -55,11 +56,13 @@ import {
 import {
   pickBonusQuestion,
   presentQuestion,
-  rollBossLoot,
-  rollChestLoot,
+  RARITY_ACCENT,
+  rollRewardChoices,
+  runLevel,
   upgradeItem,
   upgradeTarget,
   type PresentedQuestion,
+  type RewardChoice,
 } from '../systems/loot';
 import { clearSlot, makeSave, writeSlot } from '../systems/save';
 import { nearestFreeSpot, overlapsWall } from '../systems/collision';
@@ -127,7 +130,7 @@ interface PickupActor {
 interface PendingLoot {
   items: ItemDef[];
   smarts: number;
-  rarity: string;
+  rarity: Rarity;
   furniture: 'desk' | 'locker';
 }
 
@@ -153,6 +156,7 @@ type OverlayKind =
   | 'none'
   | 'paused'
   | 'inventory'
+  | 'loot-choice'
   | 'loot'
   | 'loot-question'
   | 'loot-result'
@@ -252,6 +256,9 @@ export class RunScene extends Phaser.Scene {
   #hotspots: Hotspot[] = [];
   #invIndex = 0;
   #pendingLoot: PendingLoot | null = null;
+  #lootChoices: RewardChoice[] = [];
+  #lootChoiceIndex = 0;
+  #lootFurniture: 'desk' | 'locker' = 'desk';
   #presented: PresentedQuestion | null = null;
 
   #restoredInventory: ItemDef[] | null = null;
@@ -883,7 +890,9 @@ export class RunScene extends Phaser.Scene {
     this.#inkLabel.setText(`INK ${Math.max(0, Math.round(this.#ink))}`);
     const armor = this.#armor ? `  ARM ${this.#armor.armorValue ?? 0}` : '';
     this.#weaponLabel.setText(`${this.#weapon.name.toUpperCase()}  ${this.#weapon.damage} DMG${armor}`);
-    this.#statusLabel.setText(`SMARTS ${this.#smarts}\nFLOOR ${this.#floor}/10  LEFT ${alive}`);
+    this.#statusLabel.setText(
+      `SMARTS ${this.#smarts}\nLV ${this.#level()}  FLOOR ${this.#floor}/10  LEFT ${alive}`,
+    );
     this.#floorLabel.setText(
       `WASD MOVE  ${keyName(this.#binds.attack)}/RMB SWING  LEFT CLICK GUARD  ${keyName(this.#binds.interact)} OPEN  ${keyName(this.#binds.inventory)} BAG  ${keyName(this.#binds.pause)} MENU`,
     );
@@ -1330,14 +1339,14 @@ export class RunScene extends Phaser.Scene {
 
   /** Boss payout: stage-scaled gear, then the door to the locker room. */
   #dropBossLoot(roomId: number, x: number, y: number): void {
-    const loot = rollBossLoot(this.#lootRng, this.#floor, BALANCE, ITEMS);
-    for (const item of loot.items) this.#inventory.push(item);
+    this.#lootChoices = rollRewardChoices(this.#lootRng, this.#floor, this.#level(), BALANCE, ITEMS, {
+      boss: true,
+    });
     this.#spawnLockerRoom(roomId, x, y);
     this.#refreshHud();
     this.time.delayedCall(900, () => {
       if (this.#dead) return;
-      this.#pendingLoot = { items: loot.items, smarts: loot.smarts, rarity: loot.rarity, furniture: 'locker' };
-      this.#openLootPanel();
+      this.#openLootChoice('locker');
     });
   }
 
@@ -1986,12 +1995,11 @@ export class RunScene extends Phaser.Scene {
     this.#spawnSparks(pickup.sprite.x, pickup.sprite.y - 2, 8);
 
     const luck = this.#difficulty?.lootLuck ?? 0;
-    const loot = rollChestLoot(this.#lootRng, pickup.chest, this.#floor, BALANCE, ITEMS, luck);
-    this.#smarts = Math.min(BALANCE.player.smartsCap, this.#smarts + this.#smartsGain(loot.smarts));
-    for (const item of loot.items) this.#inventory.push(item);
-    this.#pendingLoot = { ...loot, furniture: pickup.furniture };
-    this.#refreshHud();
-    this.#openLootPanel();
+    const chestLuck = pickup.chest.rarity === 'rare' ? 0.6 : pickup.chest.rarity === 'locked' ? 0.3 : 0;
+    this.#lootChoices = rollRewardChoices(this.#lootRng, this.#floor, this.#level(), BALANCE, ITEMS, {
+      luck: luck + chestLuck,
+    });
+    this.#openLootChoice(pickup.furniture);
   }
 
   #openLootPanel(): void {
@@ -2002,10 +2010,14 @@ export class RunScene extends Phaser.Scene {
     const heading = pending.furniture === 'locker' ? 'THE LOCKER CLICKS OPEN' : 'THE DESK DRAWER OPENS';
     this.#text(heading, VIEW_W / 2, 48, '#e7c65b', { width: 350, align: 'center' });
     const smarts = pending.smarts > 0 ? `  +${pending.smarts} SMARTS` : '';
-    this.#text(`${pending.rarity.toUpperCase()} FIND${smarts}`, VIEW_W / 2, 64, '#cfe3c0', {
+    this.#text(`${pending.rarity.toUpperCase()} FIND${smarts}`, VIEW_W / 2, 64, PALETTE[RARITY_ACCENT[pending.rarity]], {
       width: 350,
       align: 'center',
     });
+    if (this.#overlayGfx) {
+      const tier = pending.items[0]?.tier ?? 1;
+      this.#drawRarityRing(this.#overlayGfx, VIEW_W - 62, 104, 22, pending.rarity, tier, false);
+    }
 
     if (pending.items.length === 0) {
       this.#text('EMPTY. SOMEBODY GOT HERE FIRST.', VIEW_W / 2, 104, '#b9c0c4', { width: 330, align: 'center' });
@@ -2312,6 +2324,132 @@ export class RunScene extends Phaser.Scene {
   }
 
   // -------------------------------------------------------------------------
+  // The backpack reward screen
+  // -------------------------------------------------------------------------
+
+  #level(): number {
+    return runLevel(this.#floor, this.#unlocked.length, BALANCE);
+  }
+
+  #openLootChoice(furniture: 'desk' | 'locker'): void {
+    this.#lootFurniture = furniture;
+    this.#lootChoiceIndex = 0;
+    this.#openOverlay('loot-choice');
+    this.#renderLootChoice();
+  }
+
+  #renderLootChoice(): void {
+    this.#resetOverlayContent();
+    this.#panel(10, 10, 460, 250);
+    this.#text('THREE BACKPACKS', VIEW_W / 2, 18, '#e7c65b', { width: 320, align: 'center' });
+    this.#text(
+      `FLOOR ${this.#floor}   LEVEL ${this.#level()}   PICK ONE`,
+      VIEW_W / 2,
+      32,
+      '#a9c4a0',
+      { width: 360, align: 'center' },
+    );
+
+    const cardWidth = 136;
+    const cardHeight = 168;
+    const gap = 12;
+    const top = 48;
+    const startX = Math.round((VIEW_W - (cardWidth * 3 + gap * 2)) / 2);
+    this.#lootChoices.forEach((choice, index) => {
+      const x = startX + index * (cardWidth + gap);
+      this.#drawLootCard(x, top, cardWidth, cardHeight, choice, index, index === this.#lootChoiceIndex);
+      this.#addHotspot(x, top, cardWidth, cardHeight, () => this.#takeLootChoice(index));
+    });
+
+    this.#text('A/D OR ARROWS CHOOSE   SPACE OPEN   CLICK A BAG', VIEW_W / 2, 232, '#a9c4a0', {
+      width: 440,
+      align: 'center',
+    });
+  }
+
+  #drawLootCard(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    choice: RewardChoice,
+    style: number,
+    selected: boolean,
+  ): void {
+    const graphics = this.#overlayGfx;
+    if (!graphics) return;
+    const accent = colorNumber(RARITY_ACCENT[choice.rarity]);
+    graphics.fillStyle(selected ? 0x1d2f24 : 0x121c17, 0.94).fillRect(x, y, width, height);
+    graphics
+      .lineStyle(1, selected ? accent : 0x2f4055, 0.9)
+      .strokeRect(x + 0.5, y + 0.5, width - 1, height - 1);
+    if (selected) graphics.lineStyle(1, 0xe7c65b, 1).strokeRect(x - 2, y - 2, width + 4, height + 4);
+
+    const cx = x + width / 2;
+    const cy = y + 62;
+    this.#drawRarityRing(graphics, cx, cy, 36, choice.rarity, choice.tier, selected);
+
+    const bag = this.add.image(cx, cy, `loot-bag-${style % 3}`).setScrollFactor(0).setDepth(2001);
+    this.#overlayImages.push(bag);
+
+    this.#text(choice.rarity.toUpperCase(), cx, y + 104, PALETTE[RARITY_ACCENT[choice.rarity]], {
+      width: width - 12,
+      align: 'center',
+    });
+    this.#text(`TIER ${choice.tier}`, cx, y + 118, '#cfe3c0', { width: width - 12, align: 'center' });
+    this.#text(
+      choice.items.length === 1 ? '1 ITEM INSIDE' : `${choice.items.length} ITEMS INSIDE`,
+      cx,
+      y + 138,
+      '#8c949a',
+      { width: width - 12, align: 'center' },
+    );
+    if (selected) this.#text('PICK', cx, y + 150, '#e7c65b', { width: width - 12, align: 'center' });
+  }
+
+  #drawRarityRing(
+    graphics: Phaser.GameObjects.Graphics,
+    cx: number,
+    cy: number,
+    radius: number,
+    rarity: Rarity,
+    tier: number,
+    selected: boolean,
+  ): void {
+    const accent = colorNumber(RARITY_ACCENT[rarity]);
+    graphics.lineStyle(1, 0x0b0f12, 1).strokeCircle(cx, cy, radius + 2);
+    // The ring is always complete; how many ticks are lit is the item tier.
+    for (let segment = 0; segment < 12; segment += 1) {
+      const start = (segment / 12) * Math.PI * 2 - Math.PI / 2;
+      const end = start + ((Math.PI * 2) / 12) * 0.68;
+      const lit = segment < tier;
+      graphics.lineStyle(lit ? 3 : 1, lit ? accent : 0x3c5169, lit ? 1 : 0.55);
+      graphics.beginPath();
+      graphics.arc(cx, cy, radius, start, end, false);
+      graphics.strokePath();
+    }
+    if (selected) graphics.lineStyle(1, 0xe7c65b, 0.85).strokeCircle(cx, cy, radius + 5);
+  }
+
+  #takeLootChoice(index: number): void {
+    const choice = this.#lootChoices[index];
+    if (!choice) return;
+    this.#lootChoices = [];
+    this.#lootChoiceIndex = 0;
+    this.#smarts = Math.min(BALANCE.player.smartsCap, this.#smarts + this.#smartsGain(choice.smarts));
+    for (const item of choice.items) this.#inventory.push(item);
+    this.#pendingLoot = {
+      items: choice.items,
+      smarts: choice.smarts,
+      rarity: choice.rarity,
+      furniture: this.#lootFurniture,
+    };
+    this.#spawnSparks(this.#player.x, this.#player.y - 8, 8);
+    this.#refreshHud();
+    this.#openLootPanel();
+  }
+
+  // -------------------------------------------------------------------------
   // Overlays: pause, inventory, loot
   // -------------------------------------------------------------------------
 
@@ -2345,6 +2483,8 @@ export class RunScene extends Phaser.Scene {
     this.#clearOverlayVisuals();
     this.#overlay = 'none';
     this.#pendingLoot = null;
+    this.#lootChoices = [];
+    this.#lootChoiceIndex = 0;
     this.#presented = null;
     this.#sigilGate = null;
     this.#sigilSolved = false;
@@ -2653,6 +2793,29 @@ export class RunScene extends Phaser.Scene {
           return;
         }
         if (cancel || this.#justPressed('inventory')) this.#closeOverlay();
+        break;
+      }
+      case 'loot-choice': {
+        const count = this.#lootChoices.length;
+        if (count === 0) {
+          this.#closeOverlay();
+          return;
+        }
+        let moved = false;
+        if (this.#navJust('left') || this.#navJust('up')) {
+          this.#lootChoiceIndex = (this.#lootChoiceIndex + count - 1) % count;
+          moved = true;
+        }
+        if (this.#navJust('right') || this.#navJust('down')) {
+          this.#lootChoiceIndex = (this.#lootChoiceIndex + 1) % count;
+          moved = true;
+        }
+        if (moved) {
+          this.#renderLootChoice();
+          return;
+        }
+        // Pause does not back out: the reward has to be picked, not skipped.
+        if (confirm) this.#takeLootChoice(this.#lootChoiceIndex);
         break;
       }
       case 'loot': {

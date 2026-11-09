@@ -199,3 +199,17 @@ Short judgement calls made while building, with one line of rationale each.
     from the well and elites/bosses stand in a halo. All of it is texture choice
     and additive light from the same 32 colours, so no new palette entries,
     assets, shaders or blend modes were introduced.
+
+52. **Loot is a choice between three backpacks** — a container used to hand over
+    its roll directly, which made every desk a number. It now shows three packs,
+    each ringed with its rarity and its tier as lit ticks; the run seed decides all
+    three, so a save replays the same set. Item tier is the rarity band plus a depth
+    bonus and a level bonus, and the level itself is read from depth plus learned
+    skill nodes, so "scales with the player and the room" is a rule rather than a
+    feeling. Pause does not skip the screen: the reward has to be picked.
+53. **Sprites are drawn in three tones, not one** — player frames carry hair, a
+    hair highlight, skin, eyes, collar, blazer, blazer shadow, trousers and shoes,
+    and the walk cycle scissors the legs while the arms counter-swing. Enemies gained
+    a rim-light tone on top of base and shadow, plus readable features (cap brims,
+    glass screens, torn hems, snouts). Every new tone comes from the existing
+    32-colour palette, so the art direction is unchanged.

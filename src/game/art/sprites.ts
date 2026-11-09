@@ -74,7 +74,8 @@ function drawPlayerFrame(
   look: ClassLook,
 ): void {
   const rows = BASE_PLAYER_MAPS[dir];
-  const legShift = frame === 1 ? -1 : frame === 2 ? 1 : 0;
+  // One step each way, so the idle frame is the only symmetrical pose.
+  const step = frame === 1 ? 1 : frame === 2 ? -1 : 0;
   const bob = frame === 1 ? -1 : 0;
   const decor = new Map<string, string>();
   for (const entry of look.decor[dir] ?? []) decor.set(`${entry.x},${entry.y}`, entry.ch);
@@ -87,9 +88,16 @@ function drawPlayerFrame(
       if (ch === '.' || ch === ' ') continue;
       const name = look.colors[ch];
       if (!name) continue;
-      const offsetX = y >= 14 ? legShift : 0;
-      const offsetY = y < 14 ? bob : 0;
-      pixel(ctx, x + offsetX, y + offsetY, PALETTE[name]);
+      // Legs scissor and arms counter-swing, so a walk reads as a stride rather
+      // than the whole sprite sliding sideways. Head and torso bob on the step.
+      let dx = 0;
+      if (y >= 14) {
+        dx = dir === 'side' ? step : x < 8 ? step : -step;
+      } else if (y >= 10 && y <= 12 && (x <= 3 || x >= 12)) {
+        dx = x <= 3 ? -step : step;
+      }
+      const dy = y < 10 ? bob : 0;
+      pixel(ctx, x + dx, y + dy, PALETTE[name]);
     }
   }
 }
@@ -98,9 +106,17 @@ function drawPlayerFrame(
 // Enemies: distinct silhouettes per archetype, outlined and shaded per enemy.
 // ---------------------------------------------------------------------------
 
-function drawEnemy(ctx: CanvasRenderingContext2D, archetype: string, base: string, shade: string, accent: string): void {
+function drawEnemy(
+  ctx: CanvasRenderingContext2D,
+  archetype: string,
+  base: string,
+  shade: string,
+  light: string,
+  accent: string,
+): void {
   const outline = PALETTE.ink900;
   const eye = PALETTE.bone;
+  const pupil = PALETTE.ink900;
 
   const outlinedBox = (x: number, y: number, w: number, h: number, color: string): void => {
     box(ctx, x - 1, y - 1, w + 2, h + 2, outline);
@@ -108,93 +124,143 @@ function drawEnemy(ctx: CanvasRenderingContext2D, archetype: string, base: strin
   };
 
   switch (archetype) {
-    case 'golem':
-      outlinedBox(2, 4, 12, 4, base);
-      outlinedBox(2, 9, 12, 4, shade);
-      box(ctx, 2, 4, 12, 1, base);
-      box(ctx, 5, 5, 2, 2, eye);
-      box(ctx, 10, 5, 2, 2, eye);
+    case 'golem': {
+      // Stacked, slightly misaligned homework pages with a chalk scrawl on top.
+      outlinedBox(2, 3, 12, 5, base);
+      box(ctx, 3, 3, 10, 1, light);
+      box(ctx, 3, 6, 10, 1, shade);
+      box(ctx, 4, 5, 2, 1, PALETTE.paper);
+      box(ctx, 8, 4, 3, 1, PALETTE.paperShade);
+      outlinedBox(2, 9, 12, 5, shade);
+      box(ctx, 3, 9, 10, 1, base);
+      box(ctx, 5, 10, 2, 2, eye);
+      box(ctx, 5, 10, 1, 1, pupil);
+      box(ctx, 9, 10, 2, 2, eye);
+      box(ctx, 9, 10, 1, 1, pupil);
+      box(ctx, 1, 10, 2, 3, base);
+      box(ctx, 13, 10, 2, 3, base);
       box(ctx, 3, 14, 3, 1, outline);
       box(ctx, 10, 14, 3, 1, outline);
-      box(ctx, 7, 11, 2, 1, accent);
+      box(ctx, 7, 12, 2, 1, accent);
       break;
-    case 'humanoid':
-      outlinedBox(5, 2, 6, 5, base);
-      box(ctx, 6, 4, 1, 1, eye);
-      box(ctx, 9, 4, 1, 1, eye);
-      outlinedBox(4, 8, 8, 5, shade);
-      box(ctx, 4, 9, 1, 3, accent);
-      box(ctx, 11, 9, 1, 3, accent);
-      box(ctx, 5, 13, 2, 2, outline);
-      box(ctx, 9, 13, 2, 2, outline);
-      box(ctx, 5, 3, 6, 1, shade);
+    }
+    case 'humanoid': {
+      // A student-shaped enemy: cap brim, dead eyes, badge and swinging arms.
+      outlinedBox(5, 1, 6, 5, base);
+      box(ctx, 5, 1, 6, 1, light);
+      box(ctx, 6, 3, 1, 2, eye);
+      box(ctx, 9, 3, 1, 2, eye);
+      box(ctx, 6, 4, 1, 1, pupil);
+      box(ctx, 9, 4, 1, 1, pupil);
+      box(ctx, 4, 5, 8, 1, shade);
+      outlinedBox(4, 7, 8, 5, shade);
+      box(ctx, 5, 7, 6, 1, base);
+      box(ctx, 7, 8, 2, 1, light);
+      box(ctx, 5, 9, 1, 3, accent);
+      box(ctx, 10, 9, 1, 3, accent);
+      box(ctx, 3, 8, 1, 3, base);
+      box(ctx, 12, 8, 1, 3, base);
+      box(ctx, 5, 12, 2, 2, outline);
+      box(ctx, 9, 12, 2, 2, outline);
+      box(ctx, 5, 14, 2, 1, base);
+      box(ctx, 9, 14, 2, 1, base);
       break;
-    case 'machine':
-      outlinedBox(2, 2, 12, 12, base);
-      box(ctx, 4, 4, 8, 4, PALETTE.ink900);
-      box(ctx, 5, 5, 2, 2, accent);
-      box(ctx, 9, 5, 2, 2, eye);
-      box(ctx, 3, 11, 10, 2, shade);
-      box(ctx, 2, 2, 12, 1, PALETTE.grey100);
+    }
+    case 'machine': {
+      // A vending machine that has decided it is a person: glass, buttons, slot.
+      outlinedBox(2, 1, 12, 12, base);
+      box(ctx, 3, 1, 10, 1, light);
+      box(ctx, 3, 3, 10, 5, PALETTE.ink900);
+      box(ctx, 4, 4, 8, 3, PALETTE.blueDark);
+      box(ctx, 5, 5, 2, 1, accent);
+      box(ctx, 7, 5, 4, 1, PALETTE.teal);
+      box(ctx, 5, 6, 5, 1, PALETTE.steel);
+      box(ctx, 11, 4, 1, 1, eye);
+      box(ctx, 4, 9, 2, 2, accent);
+      box(ctx, 7, 9, 2, 2, PALETTE.grey300);
+      box(ctx, 10, 9, 2, 2, PALETTE.red);
+      box(ctx, 7, 11, 2, 1, PALETTE.yellow);
+      box(ctx, 3, 12, 10, 1, shade);
+      box(ctx, 2, 13, 3, 1, outline);
+      box(ctx, 11, 13, 3, 1, outline);
       break;
-    case 'blob':
-      outlinedBox(2, 6, 12, 8, base);
+    }
+    case 'blob': {
+      // Glossy, wet and slightly lumpy, with drips that outlive the shadow.
+      outlinedBox(2, 7, 12, 7, base);
       outlinedBox(4, 4, 8, 4, base);
+      box(ctx, 3, 7, 10, 1, light);
+      box(ctx, 5, 5, 3, 1, light);
+      box(ctx, 5, 5, 2, 1, PALETTE.bone);
       box(ctx, 2, 12, 12, 2, shade);
-      box(ctx, 5, 8, 2, 2, eye);
-      box(ctx, 9, 8, 2, 2, eye);
-      box(ctx, 3, 13, 2, 1, accent);
-      box(ctx, 11, 13, 2, 1, accent);
+      box(ctx, 4, 9, 2, 2, eye);
+      box(ctx, 4, 9, 1, 1, pupil);
+      box(ctx, 9, 9, 2, 2, eye);
+      box(ctx, 9, 9, 1, 1, pupil);
+      box(ctx, 2, 13, 2, 2, base);
+      box(ctx, 12, 13, 2, 1, base);
+      box(ctx, 7, 13, 2, 2, accent);
       break;
-    case 'ghost':
-      box(ctx, 4, 2, 8, 3, outline);
-      box(ctx, 5, 3, 6, 9, base);
-      box(ctx, 4, 4, 1, 8, base);
-      box(ctx, 11, 4, 1, 8, base);
-      box(ctx, 5, 12, 2, 2, base);
-      box(ctx, 9, 12, 2, 2, base);
-      box(ctx, 6, 10, 4, 1, shade);
-      box(ctx, 7, 10, 2, 2, accent);
-      box(ctx, 6, 5, 1, 2, eye);
-      box(ctx, 9, 5, 1, 2, eye);
+    }
+    case 'ghost': {
+      // A sheet with a torn hem, rim light down one side and hollow eyes.
+      box(ctx, 4, 1, 8, 2, outline);
+      box(ctx, 3, 3, 10, 9, base);
+      box(ctx, 2, 4, 1, 7, outline);
+      box(ctx, 13, 4, 1, 7, outline);
+      box(ctx, 3, 11, 2, 2, base);
+      box(ctx, 6, 11, 2, 3, base);
+      box(ctx, 9, 11, 2, 2, base);
+      box(ctx, 12, 11, 1, 2, base);
+      box(ctx, 4, 3, 1, 8, light);
+      box(ctx, 5, 9, 6, 1, shade);
+      box(ctx, 6, 4, 2, 3, outline);
+      box(ctx, 9, 4, 2, 3, outline);
+      box(ctx, 7, 4, 1, 1, eye);
+      box(ctx, 10, 4, 1, 1, eye);
+      box(ctx, 7, 8, 2, 1, accent);
       break;
-    case 'beast':
-      outlinedBox(1, 6, 12, 5, base);
-      outlinedBox(10, 3, 4, 5, base);
+    }
+    case 'beast': {
+      // Low hound silhouette: heavy shoulders, snout, claws and a low tail.
+      outlinedBox(1, 6, 11, 5, base);
+      box(ctx, 2, 6, 9, 1, light);
+      box(ctx, 2, 10, 9, 1, shade);
+      outlinedBox(10, 3, 5, 5, base);
+      box(ctx, 11, 3, 3, 1, light);
       box(ctx, 13, 5, 1, 1, eye);
-      box(ctx, 2, 11, 2, 4, shade);
-      box(ctx, 6, 11, 2, 4, shade);
-      box(ctx, 9, 11, 2, 4, shade);
-      box(ctx, 1, 7, 3, 1, accent);
+      box(ctx, 13, 5, 1, 1, pupil);
       box(ctx, 15, 6, 1, 1, outline);
+      box(ctx, 12, 2, 1, 1, accent);
+      box(ctx, 2, 11, 2, 4, shade);
+      box(ctx, 5, 11, 2, 4, shade);
+      box(ctx, 8, 11, 2, 4, shade);
+      box(ctx, 2, 14, 2, 1, outline);
+      box(ctx, 5, 14, 2, 1, outline);
+      box(ctx, 8, 14, 2, 1, outline);
+      box(ctx, 1, 5, 3, 1, base);
+      box(ctx, 9, 7, 2, 1, accent);
       break;
+    }
     case 'paper':
     default: {
-      ctx.fillStyle = outline;
-      ctx.beginPath();
-      ctx.moveTo(2, 2);
-      ctx.lineTo(14, 5);
-      ctx.lineTo(11, 15);
-      ctx.lineTo(1, 11);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = base;
-      ctx.beginPath();
-      ctx.moveTo(3, 4);
-      ctx.lineTo(13, 7);
-      ctx.lineTo(10, 14);
-      ctx.lineTo(2, 10);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = shade;
-      ctx.beginPath();
-      ctx.moveTo(3, 10);
-      ctx.lineTo(10, 14);
-      ctx.lineTo(2, 10);
-      ctx.closePath();
-      ctx.fill();
-      box(ctx, 5, 7, 4, 1, accent);
-      box(ctx, 7, 9, 2, 1, accent);
+      const fold = (points: readonly (readonly [number, number])[], color: string): void => {
+        const [first, ...rest] = points;
+        if (!first) return;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(first[0], first[1]);
+        for (const [x, y] of rest) ctx.lineTo(x, y);
+        ctx.closePath();
+        ctx.fill();
+      };
+      fold([[2, 1], [15, 5], [9, 15], [1, 10]], outline);
+      fold([[3, 3], [14, 6], [8, 14], [2, 9]], base);
+      fold([[3, 3], [14, 6], [8, 8]], light);
+      fold([[2, 9], [8, 14], [8, 8]], shade);
+      box(ctx, 8, 8, 1, 6, outline);
+      box(ctx, 5, 6, 4, 1, accent);
+      box(ctx, 9, 10, 1, 1, eye);
       break;
     }
   }
@@ -975,10 +1041,22 @@ export function generateArt(scene: Phaser.Scene, viewWidth = 480, viewHeight = 2
   for (const enemy of ENEMIES) {
     const key = `enemy-${enemy.archetype}-${enemy.palette}`;
     const base = paletteHex(enemy.palette);
-    const shadeHex = Phaser.Display.Color.ValueToColor(base).darken(25).color;
+    const shadeHex = Phaser.Display.Color.ValueToColor(base).darken(28).color;
+    const lightHex = Phaser.Display.Color.ValueToColor(base).lighten(16).color;
     makeCanvasTexture(scene, key, 16, 16, (ctx) =>
-      drawEnemy(ctx, enemy.archetype, base, `#${shadeHex.toString(16).padStart(6, '0')}`, PALETTE.red),
+      drawEnemy(
+        ctx,
+        enemy.archetype,
+        base,
+        `#${shadeHex.toString(16).padStart(6, '0')}`,
+        `#${lightHex.toString(16).padStart(6, '0')}`,
+        PALETTE.red,
+      ),
     );
+  }
+
+  for (let style = 0; style < 3; style += 1) {
+    makeCanvasTexture(scene, `loot-bag-${style}`, 40, 44, (ctx) => drawLootBag(ctx, style));
   }
 
   for (const item of ITEMS) ensureItemIcon(scene, item.spriteKey, item.tier);
@@ -1034,4 +1112,68 @@ export function ensurePropTexture(scene: Phaser.Scene, prop: string): string {
 
 export function enemyTextureKey(archetype: string, palette: string): string {
   return `enemy-${archetype}-${palette}`;
+}
+
+// ---------------------------------------------------------------------------
+// Reward backpacks: three large, distinct silhouettes for the loot screen.
+// ---------------------------------------------------------------------------
+
+function drawLootBag(ctx: CanvasRenderingContext2D, style: number): void {
+  const outline = PALETTE.ink900;
+  const leather = style === 2 ? PALETTE.ink700 : PALETTE.cork;
+  const dark = style === 2 ? PALETTE.ink900 : PALETTE.corkDark;
+  const light = style === 1 ? PALETTE.paperShade : PALETTE.wood;
+  const metal = PALETTE.yellow;
+  const strap = PALETTE.grey900;
+
+  const shell = (x: number, y: number, w: number, h: number, fill: string): void => {
+    box(ctx, x - 1, y - 1, w + 2, h + 2, outline);
+    box(ctx, x, y, w, h, fill);
+  };
+
+  if (style === 0) {
+    // Rucksack: tall body, top flap and two buckled shoulder straps.
+    shell(6, 8, 28, 30, leather);
+    box(ctx, 8, 9, 24, 2, light);
+    shell(5, 10, 30, 8, dark);
+    box(ctx, 6, 10, 28, 2, light);
+    box(ctx, 13, 12, 14, 2, strap);
+    box(ctx, 17, 12, 6, 4, metal);
+    box(ctx, 19, 13, 2, 2, dark);
+    shell(2, 20, 5, 12, dark);
+    shell(33, 20, 5, 12, dark);
+    box(ctx, 8, 22, 24, 1, dark);
+    box(ctx, 19, 24, 2, 8, strap);
+    box(ctx, 18, 32, 4, 2, metal);
+    box(ctx, 9, 20, 2, 6, light);
+    return;
+  }
+
+  if (style === 1) {
+    // Satchel: wide flap, centre buckle and a long diagonal shoulder strap.
+    shell(7, 14, 26, 24, leather);
+    box(ctx, 9, 15, 22, 2, light);
+    shell(6, 12, 28, 9, dark);
+    box(ctx, 7, 12, 26, 2, light);
+    box(ctx, 15, 14, 10, 5, metal);
+    box(ctx, 17, 15, 6, 3, dark);
+    for (let i = 0; i < 15; i += 1) box(ctx, 8 + i, 31 - i, 3, 2, strap);
+    box(ctx, 9, 36, 22, 1, light);
+    box(ctx, 28, 16, 4, 2, metal);
+    return;
+  }
+
+  // Duffel: a long cylinder with end panels, a zip and two handles.
+  shell(4, 16, 32, 20, leather);
+  box(ctx, 5, 17, 30, 2, light);
+  box(ctx, 6, 34, 28, 1, dark);
+  shell(10, 12, 20, 6, dark);
+  box(ctx, 12, 14, 16, 1, metal);
+  box(ctx, 18, 13, 4, 2, outline);
+  box(ctx, 12, 8, 3, 5, strap);
+  box(ctx, 25, 8, 3, 5, strap);
+  box(ctx, 12, 8, 16, 2, strap);
+  box(ctx, 4, 20, 3, 12, dark);
+  box(ctx, 33, 20, 3, 12, dark);
+  box(ctx, 7, 24, 2, 6, light);
 }
